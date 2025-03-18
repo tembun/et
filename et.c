@@ -5,10 +5,12 @@
  */
 
 
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 
 #include <fcntl.h>
 #include <libgen.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -43,10 +45,10 @@
  * `S' should be put in here _without_ double quotes.
  */
 #define WR_REV_VID(S, ...) {						\
-	dprintf(STDIN_FILENO, REV_VID_CMD #S VID_RST_CMD, __VA_ARGS__);	\
+	dprintf(STDOUT_FILENO, REV_VID_CMD #S VID_RST_CMD, __VA_ARGS__);	\
 }
 #define MV_CURS(R, C) {					\
-	dprintf(STDIN_FILENO, MV_CURS_CMD(R, C));	\
+	dprintf(STDOUT_FILENO, MV_CURS_CMD(R, C));	\
 	curs_x = C;					\
 	curs_y = R;					\
 }
@@ -80,6 +82,11 @@ struct termios tos;
 unsigned short curs_x;
 /* Terminal cursor row. */
 unsigned short curs_y;
+
+/* Number of terminal window rows. */
+unsigned short win_row;
+/* Number of terminal window columns. */
+unsigned short win_col;
 
 /*
  * Print the error message with program's name prefix and exit.
@@ -173,7 +180,7 @@ terminate()
 	 * --
 	 * `TCSANOW' flag is for changes to be applied immediately.
 	 */
-	if (tcsetattr(STDIN_FILENO, TCSANOW, &orig_tos) == -1)
+	if (tcsetattr(STDOUT_FILENO, TCSANOW, &orig_tos) == -1)
 		die("can not restore original terminal attributes.\n");
 }
 
@@ -188,7 +195,7 @@ void
 set_raw()
 {
 	/* Save current settings in `tos'. */
-	if (tcgetattr(STDIN_FILENO, &tos) == -1)
+	if (tcgetattr(STDOUT_FILENO, &tos) == -1)
 		die("can not get terminal attributes.\n");
 	
 	/* Save (copy) current settings to be able to restore them later. */
@@ -243,8 +250,49 @@ set_raw()
 	tos.c_cc[VTIME] = 0;
 	
 	/* Apply all changes we have just done. */
-	if (tcsetattr(STDIN_FILENO, TCSANOW, &tos) == -1)
+	if (tcsetattr(STDOUT_FILENO, TCSANOW, &tos) == -1)
 		die("can not set terminal attributes.\n");
+}
+
+/*
+ * Obtain information about terminal window size.
+ */
+void
+get_win_sz()
+{
+	struct winsize win_sz;
+	
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win_sz) == -1)
+		die("can not obtain the terminal window size.\n");
+	
+	/*
+	 * One line (at the top) is used for a filename,
+	 * one line (at the bottom) is for entering commands.
+	 */
+	win_row = win_sz.ws_row - 2;
+	win_col = win_sz.ws_col;
+}
+
+/*
+ * Set up a routine that will update window size information every
+ * time it changes.
+ */
+void
+init_win_sz()
+{
+	struct sigaction sa;
+	
+	get_win_sz();
+	
+	/*
+	 * It is important to initialize all fields for `sa',
+	 * because otherwise they are filled with random
+	 * values and it may (and will) lead to `EINVAL'.
+	 */
+	sa.sa_handler = get_win_sz;
+	sa.sa_flags = 0;
+	sigemptyset(&sa.sa_mask);
+	sigaction(SIGWINCH, &sa, NULL);
 }
 
 /*
@@ -389,7 +437,7 @@ print_filename()
 void
 setup_terminal()
 {
-	dprintf(STDIN_FILENO, ERASE_ALL_CMD);
+	dprintf(STDOUT_FILENO, ERASE_ALL_CMD);
 	print_filename();
 	MV_CURS(2, 1);
 }
@@ -407,7 +455,7 @@ print_ln(size_t idx, size_t start, size_t end)
 	tmp = smalloc(len);
 	strncpy(tmp, lns[idx]->str, len);
 	
-	write(STDIN_FILENO, tmp, len);
+	write(STDOUT_FILENO, tmp, len);
 	
 	free(tmp);
 }
@@ -416,13 +464,13 @@ print_ln(size_t idx, size_t start, size_t end)
  * Print the entire text currently in the buffer.
  */
 void
-print_text()
+print_page()
 {
 	size_t i;
 	
-	for (i = 0; i < lns_l; ++i) {
+	for (i = 0; i < win_row; ++i) {
 		print_ln(i, 0, lns[i]->l);
-		dprintf(STDIN_FILENO, "\n\r");
+		dprintf(STDOUT_FILENO, "\n\r");
 	}
 }
 
@@ -446,8 +494,9 @@ main(int argc, char** argv)
 
 	set_raw();
 	setup_terminal();
+	init_win_sz();
 	
-	print_text();
+	print_page();
 	
 	terminate();
 	
