@@ -24,26 +24,32 @@
 /* By how many lines the line's string is extended when it needs space. */
 #define LN_EXPAND 64
 
-/* Move _terminal_ cursor to the row `R' and column `C'. */
-#define MOV_CURS(R, C) "\x1b[" #R ";" #C "H"
+/* String command for moving terminal cursor to the row `R' and column `C'. */
+#define MV_CURS_CMD(R, C) "\x1b[" #R ";" #C "H"
 /* Enter reverse video mode, i.e. swap fore- and background colors. */
-#define REV_VID "\x1b[7m"
+#define REV_VID_CMD "\x1b[7m"
 /* Reset video mode. */
-#define VID_RST "\x1b[0m"
+#define VID_RST_CMD "\x1b[0m"
 /* Erase the whole screen contents. */
-#define ERASE_ALL "\x1b[2J"
+#define ERASE_ALL_CMD "\x1b[2J"
 
 /* Expand the string for line at `lns[I]'. */
-#define EXPAND_LN(I) { \
-	lns[I]->str = srealloc(lns[I]->str, lns[I]->sz += LN_EXPAND); \
+#define EXPAND_LN(I) {							\
+	lns[I]->str = srealloc(lns[I]->str, lns[I]->sz += LN_EXPAND);	\
 }
 
 /*
  * Write string `S' in reverse video mode and then exit it (mode).
  * `S' should be put in here _without_ double quotes.
  */
-#define WR_REV_VID(S, ...) dprintf(1, REV_VID #S VID_RST, __VA_ARGS__)
-
+#define WR_REV_VID(S, ...) {						\
+	dprintf(STDIN_FILENO, REV_VID_CMD #S VID_RST_CMD, __VA_ARGS__);	\
+}
+#define MV_CURS(R, C) {					\
+	dprintf(STDIN_FILENO, MV_CURS_CMD(R, C));	\
+	curs_x = C;					\
+	curs_y = R;					\
+}
 
 /* Main text line structure. */
 struct ln {
@@ -69,6 +75,11 @@ size_t lns_sz;
 struct termios orig_tos;
 /* Current termios(4) structure.  It is modified in order to enter raw mode. */
 struct termios tos;
+
+/* Terminal cursor column. */
+unsigned short curs_x;
+/* Terminal cursor row. */
+unsigned short curs_y;
 
 /*
  * Print the error message with program's name prefix and exit.
@@ -366,7 +377,7 @@ handle_filepath(char* path)
 void
 print_filename()
 {
-	dprintf(STDIN_FILENO, MOV_CURS(0, 0));
+	MV_CURS(1, 1);
 	WR_REV_VID(%s, filename);
 }
 
@@ -378,8 +389,41 @@ print_filename()
 void
 setup_terminal()
 {
-	dprintf(STDIN_FILENO, ERASE_ALL);
+	dprintf(STDIN_FILENO, ERASE_ALL_CMD);
 	print_filename();
+	MV_CURS(2, 1);
+}
+
+/*
+ * Print buffer line at index `idx' [`start', `end').
+ */
+void
+print_ln(size_t idx, size_t start, size_t end)
+{
+	char* tmp;
+	size_t len;
+	
+	len = end - start;
+	tmp = smalloc(len);
+	strncpy(tmp, lns[idx]->str, len);
+	
+	write(STDIN_FILENO, tmp, len);
+	
+	free(tmp);
+}
+
+/*
+ * Print the entire text currently in the buffer.
+ */
+void
+print_text()
+{
+	size_t i;
+	
+	for (i = 0; i < lns_l; ++i) {
+		print_ln(i, 0, lns[i]->l);
+		dprintf(STDIN_FILENO, "\n\r");
+	}
 }
 
 /*
@@ -393,18 +437,17 @@ main(int argc, char** argv)
 	lns_sz = 0;
 	filename = NULL;
 	
-	set_raw();
-	
 	expand_lns(0);
 	
 	if (argc > 2)
 		die("I can edit only one thing at a time.");
-	
-	if (argc > 1) {
+	if (argc > 1)
 		handle_filepath(argv[1]);
-	}
-	
+
+	set_raw();
 	setup_terminal();
+	
+	print_text();
 	
 	terminate();
 	
