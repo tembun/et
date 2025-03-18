@@ -24,10 +24,25 @@
 /* By how many lines the line's string is extended when it needs space. */
 #define LN_EXPAND 64
 
+/* Move _terminal_ cursor to the row `R' and column `C'. */
+#define MOV_CURS(R, C) "\x1b[" #R ";" #C "H"
+/* Enter reverse video mode, i.e. swap fore- and background colors. */
+#define REV_VID "\x1b[7m"
+/* Reset video mode. */
+#define VID_RST "\x1b[0m"
+/* Erase the whole screen contents. */
+#define ERASE_ALL "\x1b[2J"
+
 /* Expand the string for line at `lns[I]'. */
 #define EXPAND_LN(I) { \
 	lns[I]->str = srealloc(lns[I]->str, lns[I]->sz += LN_EXPAND); \
 }
+
+/*
+ * Write string `S' in reverse video mode and then exit it (mode).
+ * `S' should be put in here _without_ double quotes.
+ */
+#define WR_REV_VID(S, ...) dprintf(1, REV_VID #S VID_RST, __VA_ARGS__)
 
 
 /* Main text line structure. */
@@ -345,6 +360,29 @@ handle_filepath(char* path)
 }
 
 /*
+ * In the first screen row we print a name of edited
+ * file in the reverse video mode.
+ */
+void
+print_filename()
+{
+	dprintf(STDIN_FILENO, MOV_CURS(0, 0));
+	WR_REV_VID(%s, filename);
+}
+
+/*
+ * Initial terminal setup before starting printing the text out:
+ *     - Clear the screen.
+ *     - In the first row print the filename.
+ */
+void
+setup_terminal()
+{
+	dprintf(STDIN_FILENO, ERASE_ALL);
+	print_filename();
+}
+
+/*
  * Run the visual editor.
  */
 int
@@ -365,9 +403,8 @@ main(int argc, char** argv)
 	if (argc > 1) {
 		handle_filepath(argv[1]);
 	}
-	else {
-		dprintf(STDERR_FILENO, "no file is about to be read.\n");
-	}
+	
+	setup_terminal();
 	
 	terminate();
 	
