@@ -36,22 +36,23 @@
 #define ERASE_ALL_CMD "\x1b[2J"
 
 /* Expand the string for line at `lns[I]'. */
-#define EXPAND_LN(I) {							\
-	lns[I]->str = srealloc(lns[I]->str, lns[I]->sz += LN_EXPAND);	\
-}
+#define EXPAND_LN(I) do {							\
+	lns[I]->str = srealloc(lns[I]->str, lns[I]->sz += LN_EXPAND);		\
+} while(0)
 
 /*
  * Write string `S' in reverse video mode and then exit it (mode).
  * `S' should be put in here _without_ double quotes.
  */
-#define WR_REV_VID(S, ...) {						\
+#define WR_REV_VID(S, ...) do {							\
 	dprintf(STDOUT_FILENO, REV_VID_CMD #S VID_RST_CMD, __VA_ARGS__);	\
-}
-#define MV_CURS(R, C) {					\
-	dprintf(STDOUT_FILENO, MV_CURS_CMD(R, C));	\
-	curs_x = C;					\
-	curs_y = R;					\
-}
+} while (0)
+
+#define MV_CURS(R, C) do {					\
+	dprintf(STDOUT_FILENO, MV_CURS_CMD(R, C));		\
+	curs_x = C;						\
+	curs_y = R;						\
+} while (0)
 
 /* Main text line structure. */
 struct ln {
@@ -451,7 +452,14 @@ void
 print_filename()
 {
 	MV_CURS(1, 1);
-	WR_REV_VID(%s, filename);
+	if (filename != NULL)
+		WR_REV_VID(%s, filename);
+	else
+		/*
+		 * If no target file is provided as argument, then
+		 * anonymous buffer is used.
+		 */
+		WR_REV_VID(%s, "<anon>");
 }
 
 /*
@@ -477,6 +485,7 @@ print_ln(size_t idx, size_t start, size_t end)
 	size_t len;
 	
 	len = end - start;
+	
 	tmp = smalloc(len);
 	strncpy(tmp, lns[idx]->str, len);
 	
@@ -529,6 +538,9 @@ dpl_pg(size_t from)
 
 /*
  * Run the visual editor.
+ *
+ * If no arguments are provided, then an empty anonymous buffer
+ * is created and opened.
  *
  * First argument is a file path.  If there's no filt at this path,
  * then then file will be created for reading and writing and then
