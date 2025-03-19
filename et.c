@@ -26,6 +26,18 @@
 /* By how many lines the line's string is extended when it needs space. */
 #define LN_EXPAND 64
 
+/* How many spaces are between line number and actual text. */
+#define LN_NUM_OFF 2
+/* The actual text starts to be printed at this screen row. */
+#define BUF_ROW 2
+
+/* ``cmd'' mode - when user inputs commands into the prompt. */
+#define MOD_CMD 0
+/* ``nav'' mode - when we move the cursor, i.e. navigate. */
+#define MOD_NAV 1
+/* ``edit'' mode - when we edit the text, i.e. insert/delete it. */
+#define MOD_ED 2
+
 /*
  * String command for moving terminal cursor to the row `R' and column `C'.
  * It is not intended to be used "as is".  Rather, it's supposed to be used
@@ -40,10 +52,12 @@
 #define ERS_ALL_CMD "\x1b[2J"
 /* Erase the entire line. */
 #define ERS_LINE_ALL_CMD "\x1b[2K"
+/* Erase line forward. */
+#define ERS_LINE_FWD_CMD "\x1b[K"
 
 /* Expand the string for line at `lns[I]'. */
-#define EXPAND_LN(I) do {							\
-	lns[I]->str = srealloc(lns[I]->str, lns[I]->sz += LN_EXPAND);		\
+#define EXPAND_LN(I) do {						\
+	lns[I]->str = srealloc(lns[I]->str, lns[I]->sz += LN_EXPAND);	\
 } while(0)
 
 /*
@@ -58,8 +72,8 @@
  * Write string `S' in reverse video mode and then exit it (mode).
  * `S' should be put in here _without_ double quotes.
  */
-#define WR_REV_VID(S, ...) do {							\
-	dprintf(STDOUT_FILENO, REV_VID_CMD #S VID_RST_CMD, __VA_ARGS__);	\
+#define WR_REV_VID(S, ...) do {						\
+	dprintf(STDOUT_FILENO, REV_VID_CMD #S VID_RST_CMD, __VA_ARGS__);\
 } while (0)
 
 #define MV_CURS(R, C) do {				\
@@ -70,6 +84,16 @@
 
 #define ERS_ALL() dprintf(STDOUT_FILENO, ERS_ALL_CMD)
 #define ERS_LINE_ALL() dprintf(STDOUT_FILENO, ERS_LINE_ALL_CMD)
+#define ERS_LINE_FWD() dprintf(STDOUT_FILENO, ERS_LINE_FWD_CMD)
+
+/* Move cursor to the ``cmd'' prompt. */
+#define MV_CMD() MV_CURS(ws_row + 2, 1)
+
+/* Clean ``cmd'' line. */
+#define CLN_CMD() do {	\
+	MV_CMD();	\
+	ERS_LINE_ALL();	\
+} while (0)
 
 
 /* Main text line structure. */
@@ -107,10 +131,28 @@ struct termios orig_tos;
 /* Current termios(4) structure.  It is modified in order to enter raw mode. */
 struct termios tos;
 
-/* Terminal cursor column. */
+/*
+ * The current mode of the program.  There are three of them:
+ *     ``cmd'' - see `MOD_CMD'.
+ *     ``nav'' - see `MOD_NAV'.
+ *     ``edit'' - see `MOD_ED'.
+ * We start in the ``nav'' one.
+ */
+char mod;
+
+/*
+ * Terminal cursor position (row and column).
+ */
 unsigned short curs_x;
-/* Terminal cursor row. */
 unsigned short curs_y;
+
+/*
+ * The terminal cursor position used to be _before_ we escaped to
+ * the ``cmd'' prompt (see `esc_cmd').  We keep it to restore it
+ * later, when we quit the prompt.
+ */
+unsigned short nav_curs_x;
+unsigned short nav_curs_y;
 
 /* Number of terminal window rows. */
 unsigned short ws_row;
@@ -517,7 +559,7 @@ setup_terminal()
 {
 	ERS_ALL();
 	print_filename();
-	MV_CURS(2, 1);
+	MV_CURS(BUF_ROW, 1);
 }
 
 /*
@@ -539,7 +581,7 @@ print_ln(size_t idx, size_t start, size_t end)
 	 * Pad the line number for it to line up with
 	 * other line numbers.
 	 */
-	dprintf(STDOUT_FILENO, "%*zu  ", lns_l_dig, idx+1);
+	dprintf(STDOUT_FILENO, "%*zu%*s", lns_l_dig, idx+1, LN_NUM_OFF, "");
 	write(STDOUT_FILENO, tmp, len);
 	
 	free(tmp);
@@ -561,7 +603,7 @@ dpl_pg(size_t from)
 	
 	ln_num = lns_l - from;
 	
-	MV_CURS(2, 1);
+	MV_CURS(BUF_ROW, 1);
 	
 	/*
 	 * If lines can not fit the screen.
@@ -588,14 +630,43 @@ dpl_pg(size_t from)
 }
 
 /*
+ * Escape to the ``cmd'' prompt: move cursor to the ``cmd'',
+ * line, erase it, save the previous cursor position for
+ * ``nav'' mode (to restore it later) and print the ":" - 
+ * the prompt itself.
+ */
+void
+esc_cmd()
+{
+	if (mod == MOD_NAV) {
+		nav_curs_x = curs_x;
+		nav_curs_y = curs_y;
+	}
+	CLN_CMD();
+	dprintf(STDOUT_FILENO, ":");
+	mod = MOD_CMD;
+}
+
+/*
+ * Quit the ``cmd'' prompt and return to the last cursor position
+ * in the ``nav'' mode, from which we escaped to the prompt.
+ */
+void
+quit_cmd()
+{
+	CLN_CMD();
+	mod = MOD_NAV;
+	MV_CURS(nav_curs_y, nav_curs_x);
+}
+
+/*
  * Display error message on the bottommost line of the screen,
  * i.e. the line, where user can enter the commands.
  */
 void
 dpl_err(char* msg)
 {
-	ERS_LINE_ALL();
-	MV_CURS(ws_row + 2, 1);
+	CLN_CMD();
 	WR_REV_VID(%s, msg);
 }
 
@@ -635,15 +706,33 @@ read_cmd()
 		if (read(STDIN_FILENO, &buf, 1) > 0) {
 			switch (*buf) {
 			/*
-			 * ESC.
-			 * If it's met - the entire input is canceled.  But
-			 * the command is still valid.
+			 * If we meet `ESC' in the input there are two cases:
+			 *     1) It is the first character.
+			 *     2) It is in the middle of an input.
+			 * In case 1) we quit the prompt, and in case 2) we
+			 * clean the ``cmd'' input up but keep staying there.
 			 */
 			case 27:
-				return 1;
+				if (first)
+					return 1;
+				else {
+					/*
+					 * Erase everything after ":" prompt.
+					 */
+					MV_CURS(ws_row + 2, 2);
+					ERS_LINE_FWD();
+					
+					/*
+					 * Pretend that this loop has just
+					 * begun.
+					 */
+					cmd_i = 0;
+					first = 1;
+					continue;
+				}
 			/*
 			 * `Delete' and `Backspace'.
-			 * They decline the input only if they're at first place.
+			 * They decline the input only if they're first.
 			 */
 			case 8:
 			case 127:
@@ -699,8 +788,7 @@ do_cmd()
 		case 'q':
 			if (*(cmd+1) != '\n')
 				return 1;
-			ERS_LINE_ALL();
-			MV_CURS(ws_row+2, 1);
+			CLN_CMD();
 			terminate();
 			return 0;
 		default:
@@ -719,13 +807,29 @@ void
 handle_char(char c)
 {
 	switch (c) {
+	case '\r':
+	case '\n':
+	case 27:
+	case 8:
+	case 127:
+		/*
+		 * If we are here _and_ we _are_ in ``cmd'' mode,
+		 * it means that we've just entered invalid
+		 * command and see an error on the prompt line.
+		 * In this case, if we press either `ESC', `Delete'
+		 * or `Backspace', we want to continue being in
+		 * ``cmd'' mode, but just remove the error alert.
+		 * So that means we want to enter cmd-loop again
+		 * and it is done by means of falling through
+		 * to the ":" label.
+		 */
+		if (mod != MOD_CMD)
+			break;
+		/* FALLTHROUGH. */
 	case ':':
-		MV_CURS(ws_row+2 , 1);
-		ERS_LINE_ALL();
-		dprintf(STDOUT_FILENO, ":");
+		esc_cmd();
 		if (read_cmd() != 0) {
-			MV_CURS(ws_row + 2, 1);
-			ERS_LINE_ALL();
+			quit_cmd();
 			break;
 		}
 		
@@ -734,10 +838,8 @@ handle_char(char c)
 		 */
 		if (do_cmd() != 0)
 			dpl_err("Sorry.");
-		else {
-			MV_CURS(ws_row + 2, 1);
-			ERS_LINE_ALL();
-		}
+		else
+			CLN_CMD();
 		break;
 	}
 }
@@ -778,6 +880,7 @@ main(int argc, char** argv)
 	lns_sz = 0;
 	filename = NULL;
 	st_ln_idx = 0;
+	mod = MOD_NAV;
 	
 	expand_lns(0);
 	
@@ -797,6 +900,10 @@ main(int argc, char** argv)
 	init_win_sz();
 	
 	dpl_pg(st_ln_idx);
+	/*
+	 * Move cursor to the first visible character.
+	 */
+	MV_CURS(BUF_ROW, lns_l_dig + LN_NUM_OFF);
 	input_loop();
 	
 	terminate();
