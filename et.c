@@ -409,7 +409,6 @@ read_fd(int fd)
 			lns[lns_l]->l++;
 		}
 	}
-	free(lns[0]->str);
 	
 	if (arb == -1)
 		die("error during reading a file.\n");
