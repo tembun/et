@@ -137,7 +137,8 @@ scalloc(size_t n, size_t size)
 	void* ret;
 	ret = calloc(n, size);
 	if (ret == NULL)
-		die("can not alloc %zu objects %zu bytes each.\n", n, size);
+		die(
+"can not allocate %zu objects %zu bytes each.\n", n, size);
 	return ret;
 }
 
