@@ -84,9 +84,9 @@ unsigned short curs_x;
 unsigned short curs_y;
 
 /* Number of terminal window rows. */
-unsigned short win_row;
+unsigned short ws_row;
 /* Number of terminal window columns. */
-unsigned short win_col;
+unsigned short ws_col;
 
 /*
  * Print the error message with program's name prefix and exit.
@@ -269,8 +269,8 @@ get_win_sz()
 	 * One line (at the top) is used for a filename,
 	 * one line (at the bottom) is for entering commands.
 	 */
-	win_row = win_sz.ws_row - 2;
-	win_col = win_sz.ws_col;
+	ws_row = win_sz.ws_row - 2;
+	ws_col = win_sz.ws_col;
 }
 
 /*
@@ -481,13 +481,13 @@ dpl_pg(size_t from)
 	/*
 	 * If lines can not fit the screen.
 	 */
-	if (ln_num > win_row) {
-		end = from + win_row;
+	if (ln_num > ws_row) {
+		end = from + ws_row;
 		empt_num = 0;
 	}
 	else {
 		end = lns_l;
-		empt_num = win_row - ln_num;
+		empt_num = ws_row - ln_num;
 	}
 	
 	for (i = from; i < end; ++i) {
