@@ -41,6 +41,14 @@
 } while(0)
 
 /*
+ * Set `lns_l' to `V' and keep `lns_l_dig' synced with new value.
+ */
+#define LNS_L(V) do {			\
+	lns_l = V;			\
+	lns_l_dig = num_of_dig(lns_l);	\
+} while (0);
+
+/*
  * Write string `S' in reverse video mode and then exit it (mode).
  * `S' should be put in here _without_ double quotes.
  */
@@ -71,8 +79,16 @@ char* filename;
 
 /* A list of text lines. */
 struct ln** lns;
+/* Length of lines (actual number of lines). */
 size_t lns_l;
+/* Size (reserved space) for `lns' array.  Compare `lns_l'. */
 size_t lns_sz;
+/*
+ * Number of digits in `lns_l'.
+ * It is updated in sync with `lns_l' through `LNS_L' macro.
+ * It's used to pad the line numbers.  See `print_ln'.
+ */
+int lns_l_dig;
 
 /* Original termios(4) structure.  I.e. original terminal's settings. */
 struct termios orig_tos;
@@ -141,6 +157,23 @@ scalloc(size_t n, size_t size)
 		die(
 "can not allocate %zu objects %zu bytes each.\n", n, size);
 	return ret;
+}
+
+/*
+ * Get number of digits there are in the number.
+ */
+int
+num_of_dig(size_t num)
+{
+	int dig_num;
+	
+	dig_num = 0;
+	while (num != 0) {
+		num /= 10;
+		dig_num++;
+	}
+	
+	return dig_num;
 }
 
 /*
@@ -363,7 +396,7 @@ read_fd(int fd)
 	while ((arb = read(fd, &buf, IOBUF)) > 0) {
 		for (i = 0; i < arb; ++i) {
 			if (buf[i] == '\n') {
-				lns_l++;
+				LNS_L(lns_l+1);
 				if (lns_l == lns_sz)
 					expand_lns(lns_l);
 				continue;
@@ -476,7 +509,8 @@ setup_terminal()
 }
 
 /*
- * Print buffer line at index `idx' [`start', `end').
+ * Print buffer line at index `idx' [`start', `end') and prepend
+ * it with the line number.
  */
 void
 print_ln(size_t idx, size_t start, size_t end)
@@ -489,6 +523,11 @@ print_ln(size_t idx, size_t start, size_t end)
 	tmp = smalloc(len);
 	strncpy(tmp, lns[idx]->str, len);
 	
+	/*
+	 * Pad the line number for it to line up with
+	 * other line numbers.
+	 */
+	dprintf(STDOUT_FILENO, "%*zu  ", lns_l_dig, idx+1);
 	write(STDOUT_FILENO, tmp, len);
 	
 	free(tmp);
@@ -557,7 +596,7 @@ main(int argc, char** argv)
 	size_t st_ln_idx;
 	
 	lns = NULL;
-	lns_l = 0;
+	LNS_L(0);
 	lns_sz = 0;
 	filename = NULL;
 	st_ln_idx = 0;
