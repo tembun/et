@@ -419,6 +419,30 @@ handle_filepath(char* path)
 }
 
 /*
+ * Convert line number (in string representation) to index.
+ * It's used to handle start line number (2'd program argument).
+ * Returns `-1' if wrong line number is specified.
+ */
+ssize_t
+get_ln_idx(char* num_str)
+{
+	ssize_t num;
+	
+	num = strtol(num_str, NULL, 10);
+	if (num <= 0)
+		return -1;
+	
+	/*
+	 * From this point, `num' is converted to index.
+	 */
+	num--;
+	if ((size_t)num >= lns_l)
+		num = lns_l - 1;
+	
+	return num;
+}
+
+/*
  * In the first screen row we print a name of edited
  * file in the reverse video mode.
  */
@@ -504,27 +528,45 @@ dpl_pg(size_t from)
 
 /*
  * Run the visual editor.
+ *
+ * First argument is a file path.  If there's no filt at this path,
+ * then then file will be created for reading and writing and then
+ * opened.
+ *
+ * Second argument is optional and it tells the line number to open
+ * file at (i.e. which line will be at the top of the screen at
+ * first file open).
  */
 int
 main(int argc, char** argv)
 {
+	/* Start line index. */
+	size_t st_ln_idx;
+	
 	lns = NULL;
 	lns_l = 0;
 	lns_sz = 0;
 	filename = NULL;
+	st_ln_idx = 0;
 	
 	expand_lns(0);
 	
-	if (argc > 2)
+	if (argc > 3)
 		die("I can edit only one thing at a time.");
-	if (argc > 1)
+	if (argc > 1) {
 		handle_filepath(argv[1]);
+		if (argc == 3) {
+			st_ln_idx = get_ln_idx(argv[2]);
+			if ((ssize_t)st_ln_idx == -1)
+				die("invalid start line number.\n");
+		}
+	}
 
 	set_raw();
 	setup_terminal();
 	init_win_sz();
 	
-	dpl_pg(0);
+	dpl_pg(st_ln_idx);
 	
 	terminate();
 	
