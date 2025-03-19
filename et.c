@@ -31,6 +31,13 @@
 /* The actual text starts to be printed at this screen row. */
 #define BUF_ROW 2
 
+/* `ESC'. */
+#define ESC 27
+/* `Delete'. */
+#define DEL 8
+/* `Backspace'. */
+#define BSP 127
+
 /* ``cmd'' mode - when user inputs commands into the prompt. */
 #define MOD_CMD 0
 /* ``nav'' mode - when we move the cursor, i.e. navigate. */
@@ -712,7 +719,7 @@ read_cmd()
 			 * In case 1) we quit the prompt, and in case 2) we
 			 * clean the ``cmd'' input up but keep staying there.
 			 */
-			case 27:
+			case ESC:
 				if (first)
 					return 1;
 				else {
@@ -731,15 +738,16 @@ read_cmd()
 					continue;
 				}
 			/*
-			 * `Delete' and `Backspace'.
-			 * They decline the input only if they're first.
+			 * These decline the input only if they're first.
 			 */
-			case 8:
-			case 127:
+			case DEL:
+			case BSP:
 				if (first)
 					return 1;
 				break;
-			/* `\r' is mapped to `\n' manually. */
+			/*
+			 * `\r' is mapped to `\n' manually.
+			 */
 			case '\r':
 			case '\n':
 				cmd[cmd_i++] = '\n';
@@ -809,16 +817,16 @@ handle_char(char c)
 	switch (c) {
 	case '\r':
 	case '\n':
-	case 27:
-	case 8:
-	case 127:
+	case ESC:
+	case DEL:
+	case BSP:
 		/*
 		 * If we are here _and_ we _are_ in ``cmd'' mode,
 		 * it means that we've just entered invalid
 		 * command and see an error on the prompt line.
-		 * In this case, if we press either `ESC', `Delete'
-		 * or `Backspace', we want to continue being in
-		 * ``cmd'' mode, but just remove the error alert.
+		 * In this case, if we press either `ESC', `Delete',
+		 * `Backspace' or newline, we want to continue being
+		 * in ``cmd'' mode, but just remove the error alert.
 		 * So that means we want to enter cmd-loop again
 		 * and it is done by means of falling through
 		 * to the ":" label.
