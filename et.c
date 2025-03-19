@@ -26,14 +26,20 @@
 /* By how many lines the line's string is extended when it needs space. */
 #define LN_EXPAND 64
 
-/* String command for moving terminal cursor to the row `R' and column `C'. */
-#define MV_CURS_CMD(R, C) "\x1b[" #R ";" #C "H"
+/*
+ * String command for moving terminal cursor to the row `R' and column `C'.
+ * It is not intended to be used "as is".  Rather, it's supposed to be used
+ * in `MV_CURS' macro, where it's used as a format-string for `dprintf'.
+ */
+#define MV_CURS_CMD "\x1b[%d;%dH"
 /* Enter reverse video mode, i.e. swap fore- and background colors. */
 #define REV_VID_CMD "\x1b[7m"
 /* Reset video mode. */
 #define VID_RST_CMD "\x1b[0m"
 /* Erase the whole screen contents. */
-#define ERASE_ALL_CMD "\x1b[2J"
+#define ERS_ALL_CMD "\x1b[2J"
+/* Erase the entire line. */
+#define ERS_LINE_ALL_CMD "\x1b[2K"
 
 /* Expand the string for line at `lns[I]'. */
 #define EXPAND_LN(I) do {							\
@@ -56,11 +62,15 @@
 	dprintf(STDOUT_FILENO, REV_VID_CMD #S VID_RST_CMD, __VA_ARGS__);	\
 } while (0)
 
-#define MV_CURS(R, C) do {					\
-	dprintf(STDOUT_FILENO, MV_CURS_CMD(R, C));		\
-	curs_x = C;						\
-	curs_y = R;						\
+#define MV_CURS(R, C) do {				\
+	dprintf(STDOUT_FILENO, MV_CURS_CMD, R, C);	\
+	curs_x = C;					\
+	curs_y = R;					\
 } while (0)
+
+#define ERS_ALL() dprintf(STDOUT_FILENO, ERS_ALL_CMD)
+#define ERS_LINE_ALL() dprintf(STDOUT_FILENO, ERS_LINE_ALL_CMD)
+
 
 /* Main text line structure. */
 struct ln {
@@ -73,6 +83,8 @@ struct ln {
 
 /* Input/output buffer. */
 char buf[IOBUF];
+/* Buffer for user commands.  Filled by `read_cmd'. */
+char cmd[IOBUF];
 
 /* The name of the file the buffer will be written to. */
 char* filename;
@@ -503,7 +515,7 @@ print_filename()
 void
 setup_terminal()
 {
-	dprintf(STDOUT_FILENO, ERASE_ALL_CMD);
+	ERS_ALL();
 	print_filename();
 	MV_CURS(2, 1);
 }
@@ -576,6 +588,172 @@ dpl_pg(size_t from)
 }
 
 /*
+ * Display error message on the bottommost line of the screen,
+ * i.e. the line, where user can enter the commands.
+ */
+void
+dpl_err(char* msg)
+{
+	ERS_LINE_ALL();
+	MV_CURS(ws_row + 2, 1);
+	WR_REV_VID(%s, msg);
+}
+
+/*
+ * Read command from user input.
+ * Returns `0' if command has been read and it can be passed
+ * for executing, `1' - otherwise.
+ * --
+ * It reads the input byte-by-byte and populates `cmd' with only
+ * _printable_ characters from there.  Then `cmd' buffer is
+ * ready to be passed to `do_cmd' for execution.
+ * --
+ * There are several ways how we can cancel the input:
+ *     1) `\n' do that if it is a first character.
+ *     2) So do `Backspace' and `Delete'.
+ *     3) `ESC' cancels the entire input no matter where it's met.
+ */
+int
+read_cmd()
+{
+	/* Index of current `cmd' character. */
+	int cmd_i;
+	/*
+	 * Flag if it is a first read _printable_ character.  I.e. the
+	 * first character that will appear in `cmd'.
+	 */
+	int first;
+	
+	cmd_i = 0;
+	first = 1;
+	
+	/*
+	 * Read and accumulate the command within `buf'.
+	 * `\n' indicates the end of a command.
+	 */
+	while (1) {
+		if (read(STDIN_FILENO, &buf, 1) > 0) {
+			switch (*buf) {
+			/*
+			 * ESC.
+			 * If it's met - the entire input is canceled.  But
+			 * the command is still valid.
+			 */
+			case 27:
+				return 1;
+			/*
+			 * `Delete' and `Backspace'.
+			 * They decline the input only if they're at first place.
+			 */
+			case 8:
+			case 127:
+				if (first)
+					return 1;
+				break;
+			/* `\r' is mapped to `\n' manually. */
+			case '\r':
+			case '\n':
+				cmd[cmd_i++] = '\n';
+				/*
+				 * If `\n' is a first character, then the
+				 * command in fact empty and no further
+				 * processing is needed.
+				 */
+				return first;
+			default:
+				/* Handle only printable characters. */
+				if (*buf >= ' ' && *buf <= '~') {
+					/*
+					 * Update `first' flag only here,
+					 * because we _don't_ count any
+					 * unprintable characters.
+					 */
+					first = 0;
+					cmd[cmd_i++] = *buf;
+					write(STDOUT_FILENO, &buf, 1);
+				}
+			}
+		}
+	}
+	
+	/*
+	 * Actually we can reach this place only if we've entered
+	 * `IOBUF' characters and _didn't_ put a `\n' there.  So
+	 * it means that input is invalid.
+	 */
+	return 1;
+}
+
+/*
+ * Execute the command, read by `read_cmd' into `cmd' buffer.
+ * Returns `0' on success and `1' if command is invalid.
+ */
+int
+do_cmd()
+{	
+	while (*cmd != '\n') {
+		switch (*cmd) {
+		/*
+		 * Quit the editor.
+		 */
+		case 'q':
+			if (*(cmd+1) != '\n')
+				return 1;
+			ERS_LINE_ALL();
+			MV_CURS(ws_row+2, 1);
+			terminate();
+			return 0;
+		default:
+			return 1;
+		}
+	}
+	
+	/* NOTREACHED. */
+	return 1;
+}
+
+/*
+ * Routine for handling character that user's just entered.
+ */
+void
+handle_char(char c)
+{
+	switch (c) {
+	case ':':
+		MV_CURS(ws_row+2 , 1);
+		ERS_LINE_ALL();
+		dprintf(STDOUT_FILENO, ":");
+		if (read_cmd() != 0) {
+			MV_CURS(ws_row + 2, 1);
+			ERS_LINE_ALL();
+			break;
+		}
+		
+		/*
+		 * `read_cmd' has just read command into `cmd'.
+		 */
+		if (do_cmd() != 0)
+			dpl_err("Sorry.");
+		else {
+			MV_CURS(ws_row + 2, 1);
+			ERS_LINE_ALL();
+		}
+		break;
+	}
+}
+
+/*
+ * Infinite loop that handles user input byte-by-byte.
+ */
+void
+input_loop()
+{
+	while (read(STDIN_FILENO, &buf, 1) > 0) {
+		handle_char(*buf);
+	}
+}
+
+/*
  * Run the visual editor.
  *
  * If no arguments are provided, then an empty anonymous buffer
@@ -619,6 +797,7 @@ main(int argc, char** argv)
 	init_win_sz();
 	
 	dpl_pg(st_ln_idx);
+	input_loop();
 	
 	terminate();
 	
