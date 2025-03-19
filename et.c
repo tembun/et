@@ -461,17 +461,45 @@ print_ln(size_t idx, size_t start, size_t end)
 }
 
 /*
- * Print the entire text currently in the buffer.
+ * Display the text so that it fits in one screen.
+ * The print starts from the line at index `from' (the topmost line).
  */
 void
-print_page()
+dpl_pg(size_t from)
 {
 	size_t i;
+	size_t end;
+	/* Number of printable lines. */
+	size_t ln_num;
+	/* Number of trailing empty lines. */
+	size_t empt_num;
 	
-	for (i = 0; i < win_row; ++i) {
+	ln_num = lns_l - from;
+	
+	MV_CURS(2, 1);
+	
+	/*
+	 * If lines can not fit the screen.
+	 */
+	if (ln_num > win_row) {
+		end = from + win_row;
+		empt_num = 0;
+	}
+	else {
+		end = lns_l;
+		empt_num = win_row - ln_num;
+	}
+	
+	for (i = from; i < end; ++i) {
 		print_ln(i, 0, lns[i]->l);
 		dprintf(STDOUT_FILENO, "\n\r");
 	}
+	
+	/*
+	 * Print empty lines, if any.
+	 */
+	for (i = 0; i < empt_num; ++i)
+		dprintf(STDOUT_FILENO, "~\n\r");
 }
 
 /*
@@ -496,7 +524,7 @@ main(int argc, char** argv)
 	setup_terminal();
 	init_win_sz();
 	
-	print_page();
+	dpl_pg(0);
 	
 	terminate();
 	
