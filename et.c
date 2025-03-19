@@ -203,8 +203,8 @@ free_all()
 }
 
 /*
- * Terminate the program: free all the date and return to the
- * canonical terminal mode.
+ * Terminate the program: free all the data, return to the
+ * canonical terminal mode and exit.
  */
 void
 terminate()
@@ -217,6 +217,7 @@ terminate()
 	 */
 	if (tcsetattr(STDOUT_FILENO, TCSANOW, &orig_tos) == -1)
 		die("can not restore original terminal attributes.\n");
+	exit(0);
 }
 
 /*
