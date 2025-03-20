@@ -26,8 +26,6 @@
 /* By how many lines the line's string is extended when it needs space. */
 #define LN_EXPAND 64
 
-/* How many spaces are between line number and actual text. */
-#define LN_NUM_OFF 2
 /* The actual text starts to be printed at this screen row. */
 #define BUF_ROW 2
 
@@ -66,14 +64,6 @@
 #define EXPAND_LN(I) do {						\
 	lns[I]->str = srealloc(lns[I]->str, lns[I]->sz += LN_EXPAND);	\
 } while(0)
-
-/*
- * Set `lns_l' to `V' and keep `lns_l_dig' synced with new value.
- */
-#define LNS_L(V) do {			\
-	lns_l = V;			\
-	lns_l_dig = num_of_dig(lns_l);	\
-} while (0);
 
 /*
  * Write string `S' in reverse video mode and then exit it (mode).
@@ -151,12 +141,6 @@ struct ln** lns;
 size_t lns_l;
 /* Size (reserved space) for `lns' array.  Compare `lns_l'. */
 size_t lns_sz;
-/*
- * Number of digits in `lns_l'.
- * It is updated in sync with `lns_l' through `LNS_L' macro.
- * It's used to pad the line numbers.  See `print_ln'.
- */
-int lns_l_dig;
 
 /* Original termios(4) structure.  I.e. original terminal's settings. */
 struct termios orig_tos;
@@ -250,23 +234,6 @@ scalloc(size_t n, size_t size)
 		die(
 "can not allocate %zu objects %zu bytes each.\n", n, size);
 	return ret;
-}
-
-/*
- * Get number of digits there are in the number.
- */
-int
-num_of_dig(size_t num)
-{
-	int dig_num;
-	
-	dig_num = 0;
-	while (num != 0) {
-		num /= 10;
-		dig_num++;
-	}
-	
-	return dig_num;
 }
 
 /*
@@ -490,7 +457,7 @@ read_fd(int fd)
 	while ((arb = read(fd, &buf, IOBUF)) > 0) {
 		for (i = 0; i < arb; ++i) {
 			if (buf[i] == '\n') {
-				LNS_L(lns_l+1);
+				lns_l++;
 				if (lns_l == lns_sz)
 					expand_lns(lns_l);
 				continue;
@@ -630,8 +597,7 @@ setup_terminal()
 }
 
 /*
- * Print buffer line at index `idx' [`start', `end') and prepend
- * it with the line number.
+ * Print buffer line at index `idx' [`start', `end').
  */
 void
 print_ln(size_t idx, size_t start, size_t end)
@@ -644,11 +610,6 @@ print_ln(size_t idx, size_t start, size_t end)
 	tmp = smalloc(len);
 	strncpy(tmp, lns[idx]->str, len);
 	
-	/*
-	 * Pad the line number for it to line up with
-	 * other line numbers.
-	 */
-	dprintf(STDOUT_FILENO, "%*zu%*s", lns_l_dig, idx+1, LN_NUM_OFF, "");
 	write(STDOUT_FILENO, tmp, len);
 	
 	free(tmp);
@@ -954,7 +915,7 @@ main(int argc, char** argv)
 	size_t st_ln_idx;
 	
 	lns = NULL;
-	LNS_L(0);
+	lns_l = 0;
 	lns_sz = 0;
 	filename = NULL;
 	st_ln_idx = 0;
@@ -978,10 +939,8 @@ main(int argc, char** argv)
 	init_win_sz();
 	
 	dpl_pg(st_ln_idx);
-	/*
-	 * Move cursor to the first visible character.
-	 */
-	MV_CURS(BUF_ROW, lns_l_dig + LN_NUM_OFF);
+	/* Move cursor to the first visible character. */
+	MV_CURS(BUF_ROW, 1);
 	input_loop();
 	
 	terminate();
