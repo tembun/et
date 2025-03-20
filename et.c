@@ -43,7 +43,7 @@
 /* ``nav'' mode - when we move the cursor, i.e. navigate. */
 #define MOD_NAV 1
 /* ``edt'' mode - when we edit the text, i.e. insert/delete it. */
-#define MOD_ED 2
+#define MOD_EDT 2
 
 /*
  * String command for moving terminal cursor to the row `R' and column `C'.
@@ -89,9 +89,34 @@
 	curs_y = R;					\
 } while (0)
 
+/*
+ * Move cursor safely: remember current cursor position before
+ * changing it.  The further manual call of `RST_CURS' implied.
+ */
+#define MV_CURS_SF(R, C) do {	\
+	prev_curs_x = curs_x;	\
+	prev_curs_y = curs_y;	\
+	MV_CURS(R, C);		\
+} while (0)
+
+/*
+ * Reset cursor position to the one that was saved by `MV_CURS_SF'.
+ */
+#define RST_CURS() MV_CURS(prev_curs_y, prev_curs_x)
+
 #define ERS_ALL() dprintf(STDOUT_FILENO, ERS_ALL_CMD)
 #define ERS_LINE_ALL() dprintf(STDOUT_FILENO, ERS_LINE_ALL_CMD)
 #define ERS_LINE_FWD() dprintf(STDOUT_FILENO, ERS_LINE_FWD_CMD)
+
+/*
+ * Put a _printable_ character into screen and move cursor one
+ * character right.
+ */
+#define PRINT_CHAR(S) do {		\
+	dprintf(STDIN_FILENO, S);	\
+	curs_x++;			\
+	MV_CURS(curs_y, curs_x);	\
+} while (0)
 
 /* Move cursor to the ``cmd'' prompt. */
 #define MV_CMD() MV_CURS(ws_row + 2, 1)
@@ -152,6 +177,13 @@ char mod;
  */
 unsigned short curs_x;
 unsigned short curs_y;
+
+/*
+ * Previous cursor position.  Used for updating some parts of a
+ * screen and then restoring the cursor position.
+ */
+unsigned short prev_curs_x;
+unsigned short prev_curs_y;
 
 /*
  * The terminal cursor position used to be _before_ we escaped to
@@ -539,13 +571,31 @@ get_ln_idx(char* num_str)
 }
 
 /*
+ * Print current editor mode (``NAV'', ``EDT'' or ``CMD'') in
+ * the headline.
+ */
+void
+print_mod()
+{
+	MV_CURS_SF(BUF_ROW-1, 1);
+	/* Erase the current mode. */
+	dprintf(STDIN_FILENO, "   \r");
+	WR_REV_VID(%s, mod == MOD_NAV ? "NAV" : mod == MOD_EDT ? "EDT" : "CMD");
+	RST_CURS();
+}
+
+/*
  * In the first screen row we print a name of edited
  * file in the reverse video mode.
  */
 void
 print_filename()
 {
-	MV_CURS(1, 1);
+	/*
+	 * `6' (i.e. 5 characters): 3 characters are produced by
+	 * `print_mod' and 2-space offset.
+	 */
+	MV_CURS_SF(BUF_ROW-1, 6);
 	if (filename != NULL)
 		WR_REV_VID(%s, filename);
 	else
@@ -554,15 +604,16 @@ print_filename()
 		 * anonymous buffer is used.
 		 */
 		WR_REV_VID(%s, "<anon>");
+	RST_CURS();
 }
 
 /*
- * Print the editor headline, where filename dwells.
+ * Print the editor headline, where editor mode and filename dwell.
  */
 void
 print_head()
 {
-	MV_CURS(BUF_ROW-1, 1);
+	print_mod();
 	print_filename();
 }
 
@@ -646,6 +697,16 @@ dpl_pg(size_t from)
 }
 
 /*
+ * Set current mode and update it's name in the head line.
+ */
+void
+set_mod(char m)
+{
+	mod = m;
+	print_mod();
+}
+
+/*
  * Escape to the ``cmd'' prompt: move cursor to the ``cmd'',
  * line, erase it, save the previous cursor position for
  * ``nav'' mode (to restore it later) and print the ":" - 
@@ -659,8 +720,8 @@ esc_cmd()
 		nav_curs_y = curs_y;
 	}
 	CLN_CMD();
-	dprintf(STDOUT_FILENO, ":");
-	mod = MOD_CMD;
+	PRINT_CHAR(":");
+	set_mod(MOD_CMD);
 }
 
 /*
@@ -671,7 +732,7 @@ void
 quit_cmd()
 {
 	CLN_CMD();
-	mod = MOD_NAV;
+	set_mod(MOD_NAV);
 	MV_CURS(nav_curs_y, nav_curs_x);
 }
 
