@@ -19,6 +19,9 @@
 #include <unistd.h>
 
 
+typedef unsigned short US;
+
+
 /* Size for input/output buffer `buf'. */
 #define IOBUF 4096
 /* By how many lines the `lns' extended when it is not enough space. */
@@ -174,29 +177,29 @@ char mod;
 /*
  * Terminal cursor position (row and column).
  */
-unsigned short curs_x;
-unsigned short curs_y;
+US curs_x;
+US curs_y;
 
 /*
  * Previous cursor position.  Used for updating some parts of a
  * screen and then restoring the cursor position.
  */
-unsigned short prev_curs_x;
-unsigned short prev_curs_y;
+US prev_curs_x;
+US prev_curs_y;
 
 /*
  * The terminal cursor position used to be _before_ we escaped to
  * the ``cmd'' prompt (see `esc_cmd').  We keep it to restore it
  * later, when we quit the prompt.
  */
-unsigned short nav_curs_x;
-unsigned short nav_curs_y;
+US nav_curs_x;
+US nav_curs_y;
 
 /*
  * Number of terminal window rows and columns.
  */
-unsigned short ws_row;
-unsigned short ws_col;
+US ws_row;
+US ws_col;
 
 /*
  * Current line index (`ln_y') and current offset
@@ -705,7 +708,7 @@ set_mod(char m)
  * How many colums are there to the next tab stop (from current
  * cursor position).
  */
-unsigned short
+US
 nx_tab_diff()
 {
 	return TABSIZE * ((curs_x-1)/TABSIZE + 1) - curs_x + 1;
@@ -721,7 +724,7 @@ nav_right()
 	 * How many column should we move cursor to the
 	 * right.  It is used when we handle tab stops.
 	 */
-	unsigned short step;
+	US step;
 	
 	if (LN_X != lns[LN_Y]->l) {
 		if (lns[LN_Y]->str[LN_X] != '\t')
