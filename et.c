@@ -557,16 +557,25 @@ print_filename()
 }
 
 /*
+ * Print the editor headline, where filename dwells.
+ */
+void
+print_head()
+{
+	MV_CURS(BUF_ROW-1, 1);
+	print_filename();
+}
+
+/*
  * Initial terminal setup before starting printing the text out:
  *     - Clear the screen.
- *     - In the first row print the filename.
+ *     - Print the headline out.
  */
 void
 setup_terminal()
 {
 	ERS_ALL();
-	print_filename();
-	MV_CURS(BUF_ROW, 1);
+	print_head();
 }
 
 /*
