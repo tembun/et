@@ -87,6 +87,12 @@ typedef unsigned short US;
 	curs_y = R;					\
 } while (0)
 
+/*
+ * Set terminal cursor to `curs_y' and `curs_x' which are set,
+ * _before_ this macro call.
+ */
+#define SYNC_CURS() dprintf(STDOUT_FILENO, MV_CURS_CMD, curs_y, curs_x)
+
 /* Move cursor right `C' columns. */
 #define MV_CURS_R(C) do {	\
 	curs_x += C;		\
@@ -786,6 +792,17 @@ nav_right()
 			step = nx_tab(curs_x) - curs_x;
 		MV_CURS_R(step);
 		ln_x++;
+	}
+	/*
+	 * In case this is the last character on the _not_
+	 * last line, we go to the begining of next line.
+	 */
+	else if (LN_Y != lns_l - 1) {
+		ln_y++;
+		ln_x = 0;
+		curs_y++;
+		curs_x = 1;
+		SYNC_CURS();
 	}
 }
 
