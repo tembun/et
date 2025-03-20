@@ -42,7 +42,7 @@
 #define MOD_CMD 0
 /* ``nav'' mode - when we move the cursor, i.e. navigate. */
 #define MOD_NAV 1
-/* ``edit'' mode - when we edit the text, i.e. insert/delete it. */
+/* ``edt'' mode - when we edit the text, i.e. insert/delete it. */
 #define MOD_ED 2
 
 /*
@@ -140,9 +140,9 @@ struct termios tos;
 
 /*
  * The current mode of the program.  There are three of them:
- *     ``cmd'' - see `MOD_CMD'.
- *     ``nav'' - see `MOD_NAV'.
- *     ``edit'' - see `MOD_ED'.
+ *     ``cmd'' - command-prompt; see `MOD_CMD'.
+ *     ``nav'' - navigate; see `MOD_NAV'.
+ *     ``edt'' - edit; see `MOD_ED'.
  * We start in the ``nav'' one.
  */
 char mod;
