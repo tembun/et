@@ -86,10 +86,17 @@ typedef unsigned short US;
 	curs_x = C;					\
 	curs_y = R;					\
 } while (0)
+
 /* Move cursor right `C' columns. */
-#define MV_CURS_R(C) do {		\
-	curs_x += C;			\
-	MV_CURS(curs_y, curs_x);	\
+#define MV_CURS_R(C) do {	\
+	curs_x += C;		\
+	MV_CURS(curs_y, curs_x);\
+} while (0)
+
+/* Move cursor `C' columns left. */
+#define MV_CURS_L(C) do {	\
+	curs_x -= C;		\
+	MV_CURS(curs_y, curs_x);\
 } while (0)
 
 /*
@@ -705,13 +712,59 @@ set_mod(char m)
 }
 
 /*
- * How many colums are there to the next tab stop (from current
- * cursor position).
+ * Get next tab stop from the column `col'.
  */
 US
-nx_tab_diff()
+nx_tab(US col)
 {
-	return TABSIZE * ((curs_x-1)/TABSIZE + 1) - curs_x + 1;
+	return TABSIZE * ((col-1)/(TABSIZE) + 1) + 1;
+}
+
+/*
+ * Get previous tab stop from column `col'.
+ * --
+ * In order to achieve this, we iterate from the very begining
+ * of the line and count how many visual space do characters
+ * occupy.  It is due to the fact tabs do _not_ have a fixed
+ * lenght, so we can _not_ say which tab stop is previous
+ * until we compute the space for all characters before this
+ * column.
+ */
+US
+pr_tab(US col)
+{
+	/* Imaginary column. */
+	US curs_tmp;
+	/* If we meet tab we compute the next tab stop for it. */
+	US nx_tab_x;
+	/* The index of a character within current `ln'. */
+	size_t x;
+	
+	x = 0;
+	curs_tmp = 1;
+	while (1) {
+		if (lns[LN_Y]->str[x] != '\t')
+			++curs_tmp;
+		else {
+			nx_tab_x = nx_tab(curs_tmp);
+			/*
+			 * If we reach our position (the real
+			 * cursor is currently on the tab stop),
+			 * it means that in order to navigate
+			 * left we need to go to the position
+			 * _from which_ we just came.  This
+			 * position in `curs_tmp'.
+			 */
+			if (nx_tab_x == col)
+				return curs_tmp;
+			else
+				curs_tmp = nx_tab_x;
+		}
+		++x;
+	}
+	
+	/* UNREACHED. */
+	return 0;
 }
 
 /*
@@ -730,9 +783,28 @@ nav_right()
 		if (lns[LN_Y]->str[LN_X] != '\t')
 			step = 1;
 		else
-			step = nx_tab_diff();
+			step = nx_tab(curs_x) - curs_x;
 		MV_CURS_R(step);
 		ln_x++;
+	}
+}
+
+/*
+ * Navigate text cursor to the left.
+ */
+void
+nav_left()
+{
+	/* See at `nav_right'. */
+	US step;
+	
+	if (LN_X != 0) {
+		if (lns[LN_Y]->str[LN_X-1] != '\t')
+			step = 1;
+		else
+			step = curs_x - pr_tab(curs_x);
+		MV_CURS_L(step);
+		ln_x--;
 	}
 }
 
@@ -954,6 +1026,13 @@ handle_char(char c)
 			nav_right();
 			break;
 		}
+		break;
+	case 'j':
+		if (mod == MOD_NAV) {
+			nav_left();
+			break;
+		}
+		break;
 	}
 }
 
