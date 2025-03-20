@@ -28,6 +28,11 @@
 
 /* The actual text starts to be printed at this screen row. */
 #define BUF_ROW 2
+/*
+ * The number of columns between tab stops.
+ * It makes sense to keep in in sync with your terminal emulator settings.
+ */
+#define TABSIZE 8
 
 /* `ESC'. */
 #define ESC 27
@@ -78,6 +83,11 @@
 	curs_x = C;					\
 	curs_y = R;					\
 } while (0)
+/* Move cursor right `C' columns. */
+#define MV_CURS_R(C) do {		\
+	curs_x += C;			\
+	MV_CURS(curs_y, curs_x);	\
+} while (0)
 
 /*
  * Move cursor safely: remember current cursor position before
@@ -99,13 +109,18 @@
 #define ERS_LINE_FWD() dprintf(STDOUT_FILENO, ERS_LINE_FWD_CMD)
 
 /*
+ * Actual current position within `lns'.  See `ln_x', `ln_y'.
+ */
+#define LN_X (off_x + ln_x)
+#define LN_Y (off_y + ln_y)
+
+/*
  * Put a _printable_ character into screen and move cursor one
  * character right.
  */
 #define PRINT_CHAR(S) do {		\
 	dprintf(STDIN_FILENO, S);	\
-	curs_x++;			\
-	MV_CURS(curs_y, curs_x);	\
+	MV_CURS_R(1);			\
 } while (0)
 
 /* Move cursor to the ``cmd'' prompt. */
@@ -177,10 +192,29 @@ unsigned short prev_curs_y;
 unsigned short nav_curs_x;
 unsigned short nav_curs_y;
 
-/* Number of terminal window rows. */
+/*
+ * Number of terminal window rows and columns.
+ */
 unsigned short ws_row;
-/* Number of terminal window columns. */
 unsigned short ws_col;
+
+/*
+ * Current line index (`ln_y') and current offset
+ * within its string (`ln_x').
+ * To _read_ the values, use `LN_X' and `LN_Y'.
+ */
+size_t ln_x;
+size_t ln_y;
+
+/*
+ * Horizontal and vertical offsets of a lines in the screen.
+ * They are used to compute `LN_X' and `LN_Y'.
+ * --
+ * Example: `off_y' of 5 means that the first (topmost) line
+ * we see on the screen is `lns[5]' line.
+ */
+size_t off_x;
+size_t off_y;
 
 /*
  * Print the error message with program's name prefix and exit.
@@ -617,10 +651,10 @@ print_ln(size_t idx, size_t start, size_t end)
 
 /*
  * Display the text so that it fits in one screen.
- * The print starts from the line at index `from' (the topmost line).
+ * The print starts from the current vertical line offset `off_y'.
  */
 void
-dpl_pg(size_t from)
+dpl_pg()
 {
 	size_t i;
 	size_t end;
@@ -629,7 +663,7 @@ dpl_pg(size_t from)
 	/* Number of trailing empty lines. */
 	size_t empt_num;
 	
-	ln_num = lns_l - from;
+	ln_num = lns_l - off_y;
 	
 	MV_CURS(BUF_ROW, 1);
 	
@@ -637,7 +671,7 @@ dpl_pg(size_t from)
 	 * If lines can not fit the screen.
 	 */
 	if (ln_num > ws_row) {
-		end = from + ws_row;
+		end = off_y + ws_row;
 		empt_num = 0;
 	}
 	else {
@@ -645,7 +679,7 @@ dpl_pg(size_t from)
 		empt_num = ws_row - ln_num;
 	}
 	
-	for (i = from; i < end; ++i) {
+	for (i = off_y; i < end; ++i) {
 		print_ln(i, 0, lns[i]->l);
 		dprintf(STDOUT_FILENO, "\n\r");
 	}
@@ -658,13 +692,45 @@ dpl_pg(size_t from)
 }
 
 /*
- * Set current mode and update it's name in the head line.
+ * Set current mode and update its name in the head line.
  */
 void
 set_mod(char m)
 {
 	mod = m;
 	print_mod();
+}
+
+/*
+ * How many colums are there to the next tab stop (from current
+ * cursor position).
+ */
+unsigned short
+nx_tab_diff()
+{
+	return TABSIZE * ((curs_x-1)/TABSIZE + 1) - curs_x + 1;
+}
+
+/*
+ * Navigate text cursor to the right.
+ */
+void
+nav_right()
+{
+	/*
+	 * How many column should we move cursor to the
+	 * right.  It is used when we handle tab stops.
+	 */
+	unsigned short step;
+	
+	if (LN_X != lns[LN_Y]->l) {
+		if (lns[LN_Y]->str[LN_X] != '\t')
+			step = 1;
+		else
+			step = nx_tab_diff();
+		MV_CURS_R(step);
+		ln_x++;
+	}
 }
 
 /*
@@ -880,6 +946,11 @@ handle_char(char c)
 		else
 			CLN_CMD();
 		break;
+	case ';':
+		if (mod == MOD_NAV) {
+			nav_right();
+			break;
+		}
 	}
 }
 
@@ -911,15 +982,15 @@ input_loop()
 int
 main(int argc, char** argv)
 {
-	/* Start line index. */
-	size_t st_ln_idx;
-	
 	lns = NULL;
 	lns_l = 0;
 	lns_sz = 0;
 	filename = NULL;
-	st_ln_idx = 0;
 	mod = MOD_NAV;
+	off_x = 0;
+	off_y = 0;
+	ln_x = 0;
+	ln_y = 0;
 	
 	expand_lns(0);
 	
@@ -928,17 +999,17 @@ main(int argc, char** argv)
 	if (argc > 1) {
 		handle_filepath(argv[1]);
 		if (argc == 3) {
-			st_ln_idx = get_ln_idx(argv[2]);
-			if ((ssize_t)st_ln_idx == -1)
+			off_y = get_ln_idx(argv[2]);
+			if ((ssize_t)off_y == -1)
 				die("invalid start line number.\n");
 		}
 	}
-
+	
 	set_raw();
 	setup_terminal();
 	init_win_sz();
 	
-	dpl_pg(st_ln_idx);
+	dpl_pg();
 	/* Move cursor to the first visible character. */
 	MV_CURS(BUF_ROW, 1);
 	input_loop();
