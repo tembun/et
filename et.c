@@ -727,50 +727,28 @@ nx_tab(US col)
 }
 
 /*
- * Get previous tab stop from column `col'.
- * --
- * In order to achieve this, we iterate from the very begining
- * of the line and count how many visual space do characters
- * occupy.  It is due to the fact tabs do _not_ have a fixed
- * lenght, so we can _not_ say which tab stop is previous
- * until we compute the space for all characters before this
- * column.
+ * On which column does this (`l_x') character in
+ * this (`l_y') line resides.
  */
 US
-pr_tab(US col)
+char_col(size_t l_y, size_t l_x)
 {
 	/* Imaginary column. */
 	US curs_tmp;
-	/* If we meet tab we compute the next tab stop for it. */
-	US nx_tab_x;
 	/* The index of a character within current `ln'. */
 	size_t x;
 	
 	x = 0;
 	curs_tmp = 1;
-	while (1) {
-		if (lns[LN_Y]->str[x] != '\t')
+	while (x != l_x) {
+		if (lns[l_y]->str[x] != '\t')
 			++curs_tmp;
-		else {
-			nx_tab_x = nx_tab(curs_tmp);
-			/*
-			 * If we reach our position (the real
-			 * cursor is currently on the tab stop),
-			 * it means that in order to navigate
-			 * left we need to go to the position
-			 * _from which_ we just came.  This
-			 * position in `curs_tmp'.
-			 */
-			if (nx_tab_x == col)
-				return curs_tmp;
-			else
-				curs_tmp = nx_tab_x;
-		}
+		else
+			curs_tmp = nx_tab(curs_tmp);
 		++x;
 	}
 	
-	/* UNREACHED. */
-	return 0;
+	return curs_tmp;
 }
 
 /*
@@ -811,17 +789,24 @@ nav_right()
  */
 void
 nav_left()
-{
-	/* See at `nav_right'. */
-	US step;
-	
+{	
 	if (LN_X != 0) {
+		/* See at `nav_right'. */
+		US step;
+		
 		if (lns[LN_Y]->str[LN_X-1] != '\t')
 			step = 1;
 		else
-			step = curs_x - pr_tab(curs_x);
+			step = curs_x - char_col(LN_Y, LN_X-1);
 		MV_CURS_L(step);
 		ln_x--;
+	}
+	else if (LN_Y != 0) {
+		ln_y--;
+		ln_x = lns[LN_Y]->l;
+		curs_y--;
+		curs_x = char_col(LN_Y, ln_x);
+		SYNC_CURS();
 	}
 }
 
