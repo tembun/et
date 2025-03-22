@@ -851,7 +851,7 @@ nav_right()
  */
 void
 nav_left()
-{	
+{
 	if (LN_X != 0) {
 		/* See at `nav_right'. */
 		US step;
@@ -882,13 +882,31 @@ nav_left()
 void
 nav_dwn()
 {
-	if (ln_y != ws_row - 1) {
+	/* Is using scroll. */
+	char scrl;
+	
+	scrl = ln_y == ws_row-1 && LN_Y != lns_l-1;
+	
+	if (scrl)
+		off_y++;
+	
+	/* Not last line of a _text_. */
+	if (LN_Y != lns_l-1) {
 		US nw_curs_x;
 		
-		ln_y++;
-		curs_y++;
+		if (!scrl) {
+			ln_y++;
+			curs_y++;
+		}
 		ln_x = col2char(LN_Y, curs_x, &nw_curs_x);
-		curs_x = nw_curs_x;		
+		curs_x = nw_curs_x;
+		
+		if (!scrl)
+			SYNC_CURS();
+	}
+	
+	if (scrl) {
+		dpl_pg();
 		SYNC_CURS();
 	}
 }
@@ -907,6 +925,7 @@ nav_up()
 	if (scrl)
 		off_y--;
 	
+	/* Not a first line in the _text_. */
 	if (LN_Y != 0) {
 		US nw_curs_x;
 		
