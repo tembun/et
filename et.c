@@ -30,7 +30,7 @@ typedef unsigned short US;
 #define LN_EXPAND 64
 
 /* The actual text starts to be printed at this screen row. */
-#define BUF_ROW 2
+#define BUF_ROW 1
 /*
  * The number of columns between tab stops.
  * It makes sense to keep in in sync with your terminal emulator settings.
@@ -140,7 +140,7 @@ typedef unsigned short US;
  * character right.
  */
 #define PRINT_CHAR(S) do {		\
-	dprintf(STDIN_FILENO, S);	\
+	dprintf(STDOUT_FILENO, S);	\
 	MV_CURS_R(1);			\
 } while (0)
 
@@ -423,10 +423,10 @@ get_win_sz()
 		die("can not obtain the terminal window size.\n");
 	
 	/*
-	 * One line (at the top) is used for an editor mode,
-	 * one line (at the bottom) is for entering commands.
+	 * One line (at the bottom) is for entering commands and
+	 * status bar.
 	 */
-	ws_row = win_sz.ws_row - 2;
+	ws_row = win_sz.ws_row - 1;
 	ws_col = win_sz.ws_col;
 }
 
@@ -561,26 +561,37 @@ handle_filepath(char* path)
 }
 
 /*
- * Print current editor mode (``NAV'', ``EDT'' or ``CMD'') in
- * the headline.
+ * Print current editor mode: ``NAV'' or ``EDT''.  There's no need to
+ * print the ``CMD'' mode, because it uses the same line as status does.
  */
 void
 print_mod()
 {
-	MV_CURS_SF(BUF_ROW-1, 1);
+	MV_CURS_SF(ws_row+1, 1);
 	/* Erase the current mode. */
-	dprintf(STDIN_FILENO, "   \r");
-	WR_REV_VID(%s, mod == MOD_NAV ? "NAV" : mod == MOD_EDT ? "EDT" : "CMD");
+	dprintf(STDOUT_FILENO, "   \r");
+	WR_REV_VID(%s, mod == MOD_NAV ? "NAV" : "EDT");
 	RST_CURS();
 }
 
 /*
- * Print the editor headline, where editor mode dwells.
+ * Print the editor status-line, where editor mode dwells.
+ * This is the same line that used for ``cmd'' prompt.
  */
 void
-print_head()
+print_status()
 {
 	print_mod();
+	/*
+	 * Put the cursor _after_ the mode name (3 characters).
+	 */
+	MV_CURS_SF(ws_row+1, 4);
+	/*
+	 * Print an 80-character (3 characters are for mode name)
+	 * long line (in reverse mode) as a ruler.
+	 */
+	WR_REV_VID(%*s, 77, "");
+	RST_CURS();
 }
 
 /*
@@ -592,7 +603,7 @@ void
 setup_terminal()
 {
 	ERS_ALL();
-	print_head();
+	print_status();
 }
 
 /*
@@ -657,6 +668,9 @@ dpl_pg()
 		dprintf(STDOUT_FILENO, "~\n\r");
 	
 	RST_CURS();
+	
+	if (mod != MOD_CMD)
+		print_status();
 }
 
 /*
@@ -666,7 +680,8 @@ void
 set_mod(char m)
 {
 	mod = m;
-	print_mod();
+	if (mod != MOD_CMD)
+		print_mod();
 }
 
 /*
@@ -1008,7 +1023,7 @@ scrl_up()
 	 */
 	if (curs_y+scrl_n > ws_row-1) {
 		curs_x = 1;
-		curs_y = ws_row+1;
+		curs_y = ws_row;
 		ln_x = 0;
 		ln_y = ws_row-1;
 	}
@@ -1052,8 +1067,9 @@ void
 quit_cmd()
 {
 	CLN_CMD();
-	set_mod(MOD_NAV);
+	mod = MOD_NAV;
 	MV_CURS(nav_curs_y, nav_curs_x);
+	print_status();
 }
 
 /*
