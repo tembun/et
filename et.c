@@ -990,8 +990,10 @@ scrl_dwn()
 	 * Otherwise, keep cursor at the same position (but
 	 * compensate scrolling down).
 	 */
-	else
+	else {
 		curs_y -= scrl_n;
+		ln_y -= scrl_n;
+	}
 	
 	off_y += scrl_n;	
 	dpl_pg();
