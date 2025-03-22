@@ -215,9 +215,10 @@ US ws_row;
 US ws_col;
 
 /*
- * Current line index (`ln_y') and current offset
- * within its string (`ln_x').
- * To _read_ the values, use `LN_X' and `LN_Y'.
+ * Current line index (`ln_y') and current offset within its string (`ln_x').
+ * These values are in range [0, `ws_row'-1] (`ln_y') and [0, `ws_col'-1]
+ * (`ln_x').  Thus, they are limited to the screen.  To get actual offsets
+ * within the `lns', use `LN_X' and `LN_Y'.
  */
 size_t ln_x;
 size_t ln_y;
