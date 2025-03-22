@@ -729,9 +729,11 @@ nx_tab(US col)
 /*
  * On which column does this (`l_x') character in
  * this (`l_y') line resides.
+ * --
+ * The reverse of `col2char'.
  */
 US
-char_col(size_t l_y, size_t l_x)
+char2col(size_t l_y, size_t l_x)
 {
 	/* Imaginary column. */
 	US curs_tmp;
@@ -749,6 +751,59 @@ char_col(size_t l_y, size_t l_x)
 	}
 	
 	return curs_tmp;
+}
+
+/*
+ * What character in `l_y' line is at `col' screen column.
+ * If column `col' the actual length of a string, then
+ * assume the request is for the last character string.
+ * Due to this, it also puts the actual column number
+ * (because it doesn't always match the passed `col')
+ * in the `res_col'.
+ * --
+ * It also puts the _actual_ 
+ * --
+ * The reverse of `char2col'.
+ */
+size_t
+col2char(size_t l_y, US col, US* res_col)
+{
+	US curs_tmp;
+	US nx_tab_col;
+	size_t x;
+	
+	x = 0;
+	curs_tmp = 1;
+	while (curs_tmp <= col && x < lns[l_y]->l) {
+		if (lns[l_y]->str[x] != '\t')
+			++curs_tmp;
+		else {
+			nx_tab_col = nx_tab(curs_tmp);
+			/*
+			 * Handle the case, when there is a tab-stop-gap
+			 * _below_ our cursor position.  We decide where
+			 * to go: to the begining of a tab stop or to the
+			 * end of it depending on which is closer to us.
+			 */
+			if (nx_tab_col > col) {
+				/* Go to the tab stop start. */
+				if (col-curs_tmp < nx_tab_col-col) {
+					*res_col = curs_tmp;
+					return x;
+				}
+				/* Go to the tab stop end. */
+				else {
+					*res_col = nx_tab_col;
+					return x+1;
+				}
+			}
+			curs_tmp = nx_tab_col;
+		}
+		++x;
+	}
+	
+	*res_col = curs_tmp;
+	return x;
 }
 
 /*
@@ -794,18 +849,39 @@ nav_left()
 		/* See at `nav_right'. */
 		US step;
 		
-		if (lns[LN_Y]->str[LN_X-1] != '\t')
+		ln_x--;
+		
+		if (lns[LN_Y]->str[LN_X] != '\t')
 			step = 1;
 		else
-			step = curs_x - char_col(LN_Y, LN_X-1);
+			step = curs_x - char2col(LN_Y, LN_X);
 		MV_CURS_L(step);
-		ln_x--;
 	}
+	/*
+	 * Go to the end of a previous line.
+	 */
 	else if (LN_Y != 0) {
 		ln_y--;
 		ln_x = lns[LN_Y]->l;
 		curs_y--;
-		curs_x = char_col(LN_Y, ln_x);
+		curs_x = char2col(LN_Y, LN_X);
+		SYNC_CURS();
+	}
+}
+
+/*
+ * Navigate text cursor down.
+ */
+void
+nav_dwn()
+{
+	if (ln_y != ws_row - 1) {
+		US nw_curs_x;
+		
+		ln_y++;
+		curs_y++;
+		ln_x = col2char(LN_Y, curs_x, &nw_curs_x);
+		curs_x = nw_curs_x;		
 		SYNC_CURS();
 	}
 }
@@ -1032,6 +1108,12 @@ handle_char(char c)
 	case 'j':
 		if (mod == MOD_NAV) {
 			nav_left();
+			break;
+		}
+		break;
+	case 'l':
+		if (mod == MOD_NAV) {
+			nav_dwn();
 			break;
 		}
 		break;
