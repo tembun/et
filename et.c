@@ -728,8 +728,6 @@ char2col(size_t l_y, size_t l_x)
  * (because it doesn't always match the passed `col')
  * in the `res_col'.
  * --
- * It also puts the _actual_ 
- * --
  * The reverse of `char2col'.
  */
 size_t
