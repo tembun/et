@@ -529,7 +529,8 @@ read_fd(int fd)
 /*
  * If the editor's been invoked with a file path, then
  * we need to read the contents of the file at this
- * path (if it doesn't exist - create it).
+ * path.  If there's no file exists at this path, we
+ * just open an empty buffer (do not create a file now).
  */
 void
 handle_filepath(char* path)
@@ -550,11 +551,8 @@ handle_filepath(char* path)
 			die("can not open file at %s.\n", path);
 		read_fd(fd);
 	}
-	else {
-		fd = open(path, O_CREAT | O_RDWR);
-		if (fd == -1)
-			die("can not open file at %s.\n", path);
-	}
+	else
+		return;
 	
 	if (close(fd) == -1)
 		die("can not close the file.\n");
@@ -1310,7 +1308,9 @@ input_loop()
  * Run the visual editor.
  *
  * If no arguments are provided, then an empty anonymous buffer
- * is created and opened.
+ * is created and opened.  You will be prompted to specify a
+ * name to write the buffer out to when you make an attempt for
+ * ``write'' command.
  *
  * First and the only one available argument is a file path. If
  * there's no filt at this path, then then file will be created
