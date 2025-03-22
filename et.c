@@ -958,17 +958,31 @@ scrl_dwn()
 	/* How many lines to _actually_ scroll. */
 	size_t  scrl_n;
 	
+	/*
+	 * If we want to scroll out of screen scroll until
+	 * the last text line will be the last screen line.
+	 */
 	if (last_ln+SCRL_LN >= lns_l)
 		scrl_n = lns_l-1 - last_ln;
 	else
 		scrl_n = SCRL_LN;
 	
+	/*
+	 * If current cursor position will not survive scrolling
+	 * (will linger in the top and be lost), then we manually
+	 * put it in the begining of a first visible line after
+	 * scrolling.
+	 */
 	if (scrl_n > ln_y || curs_y-scrl_n < BUF_ROW) {
 		curs_x = 1;
 		curs_y = BUF_ROW;
 		ln_x = 0;
 		ln_y = 0;
 	}
+	/*
+	 * Otherwise, keep cursor at the same position (but
+	 * compensate scrolling down).
+	 */
 	else
 		curs_y -= scrl_n;
 	
