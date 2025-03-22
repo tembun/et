@@ -888,6 +888,23 @@ nav_dwn()
 }
 
 /*
+ * Navigate text cursor up.
+ */
+void
+nav_up()
+{
+	if (ln_y != 0) {
+		US nw_curs_x;
+		
+		ln_y--;
+		curs_y--;
+		ln_x = col2char(LN_Y, curs_x, &nw_curs_x);
+		curs_x = nw_curs_x;
+		SYNC_CURS();
+	}
+}
+
+/*
  * Escape to the ``cmd'' prompt: move cursor to the ``cmd'',
  * line, erase it, save the previous cursor position for
  * ``nav'' mode (to restore it later) and print the ":" - 
@@ -1118,6 +1135,11 @@ handle_char(char c)
 			break;
 		}
 		break;
+	case 'k':
+		if (mod == MOD_NAV) {
+			nav_up();
+			break;
+		}
 	}
 }
 
