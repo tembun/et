@@ -1059,11 +1059,12 @@ quit_cmd()
 }
 
 /*
- * Display error message on the bottommost line of the screen,
- * i.e. the line, where user can enter the commands.
+ * Display text message on the bottommost line of the screen,
+ * i.e. the line, where user can enter the commands.  The text
+ * is printed in reverse-video mode.
  */
 void
-dpl_err(char* msg)
+dpl_cmd_txt(char* msg)
 {
 	CLN_CMD();
 	WR_REV_VID(%s, msg);
@@ -1175,7 +1176,13 @@ read_cmd()
 
 /*
  * Execute the command, read by `read_cmd' into `cmd' buffer.
- * Returns `0' on success and `1' if command is invalid.
+ * Returns `0' if command is successfull and we need to immediately
+ * clean the ``cmd'' line up.
+ * Returns `1' if the command is OK,
+ * but we do _not_ need to clean things up.  It is for commands
+ * which outputs the text to the ``cmd'' as a result of execution.
+ * Returns `-1' if command if failed and we need to print an error
+ * message on the ``cmd'' line.
  */
 int
 do_cmd()
@@ -1191,8 +1198,11 @@ do_cmd()
 			CLN_CMD();
 			terminate();
 			return 0;
-		default:
+		case 'f':
+			dpl_cmd_txt(filepath);
 			return 1;
+		default:
+			return -1;
 		}
 	}
 	
@@ -1236,10 +1246,15 @@ handle_char(char c)
 		/*
 		 * `read_cmd' has just read command into `cmd'.
 		 */
-		if (do_cmd() != 0)
-			dpl_err("Sorry.");
-		else
+		switch (do_cmd()) {
+		case -1:
+			dpl_cmd_txt("Sorry.");
+			break;
+		case 0:
 			CLN_CMD();
+			break;
+		/* `1' means we don't need to do anything. */
+		}
 		break;
 	case ';':
 		if (mod == MOD_NAV) {
