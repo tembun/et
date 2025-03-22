@@ -836,14 +836,30 @@ nav_right()
 		ln_x++;
 	}
 	/*
-	 * In case this is the last character on the _not_
-	 * last line, we go to the begining of next line.
+	 * If this is the last character on the _not_
+	 * last line in the buffer.
 	 */
 	else if (LN_Y != lns_l - 1) {
-		ln_y++;
+		/* Flag is screen scrolling needed. */
+		char scrl;
+		
+		/*
+		 * Scroll is needed only if current line is
+		 * the last visible on the screen.
+		 */
+		scrl = ln_y == ws_row-1;
+		
 		ln_x = 0;
-		curs_y++;
 		curs_x = 1;
+		
+		if (scrl) {
+			off_y++;
+			dpl_pg();
+		}
+		else {
+			ln_y++;
+			curs_y++;
+		}
 		SYNC_CURS();
 	}
 }
