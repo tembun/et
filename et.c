@@ -956,7 +956,14 @@ scrl_dwn()
 	/* Last visible line index of the screen. */
 	size_t last_ln = off_y+ws_row-1;
 	/* How many lines to _actually_ scroll. */
-	size_t  scrl_n;
+	size_t scrl_n;
+	
+	/*
+	 * If we're already on the last screen - we have nothing
+	 * to scroll.
+	 */
+	if (off_y+ws_row == lns_l)
+		return;
 	
 	/*
 	 * If we want to scroll out of screen scroll until
