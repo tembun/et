@@ -168,9 +168,6 @@ char buf[IOBUF];
 /* Buffer for user commands.  Filled by `read_cmd'. */
 char cmd[IOBUF];
 
-/* The name of the file the buffer will be written to. */
-char* filename;
-
 /* A list of text lines. */
 struct ln** lns;
 /* Length of lines (actual number of lines). */
@@ -315,7 +312,6 @@ void
 free_all()
 {
 	free_lns();
-	free(filename);
 }
 
 /*
@@ -418,7 +414,7 @@ get_win_sz()
 		die("can not obtain the terminal window size.\n");
 	
 	/*
-	 * One line (at the top) is used for a filename,
+	 * One line (at the top) is used for an editor mode,
 	 * one line (at the bottom) is for entering commands.
 	 */
 	ws_row = win_sz.ws_row - 2;
@@ -475,16 +471,6 @@ expand_lns(size_t off)
 }
 
 /*
- * The `filename' to `name'.
- */
-void
-set_filename(char* name)
-{
-	filename = srealloc(filename, strlen(name)+1);
-	strcpy(filename, name);
-}
-
-/*
  * Check if file at `path' does exist.
  */
 char
@@ -534,9 +520,7 @@ read_fd(int fd)
 /*
  * If the editor's been invoked with a file path, then
  * we need to read the contents of the file at this
- * path (if it doesn't exist - create it), extract the
- * file _name_ from the path and remember it as a name
- * for a file we will write the buffer back later.
+ * path (if it doesn't exist - create it).
  */
 void
 handle_filepath(char* path)
@@ -565,8 +549,6 @@ handle_filepath(char* path)
 	
 	if (close(fd) == -1)
 		die("can not close the file.\n");
-	
-	set_filename(basename(path));
 }
 
 /*
@@ -584,36 +566,12 @@ print_mod()
 }
 
 /*
- * In the first screen row we print a name of edited
- * file in the reverse video mode.
- */
-void
-print_filename()
-{
-	/*
-	 * `6' (i.e. 5 characters): 3 characters are produced by
-	 * `print_mod' and 2-space offset.
-	 */
-	MV_CURS_SF(BUF_ROW-1, 6);
-	if (filename != NULL)
-		WR_REV_VID(%s, filename);
-	else
-		/*
-		 * If no target file is provided as argument, then
-		 * anonymous buffer is used.
-		 */
-		WR_REV_VID(%s, "<anon>");
-	RST_CURS();
-}
-
-/*
- * Print the editor headline, where editor mode and filename dwell.
+ * Print the editor headline, where editor mode dwells.
  */
 void
 print_head()
 {
 	print_mod();
-	print_filename();
 }
 
 /*
@@ -1338,7 +1296,6 @@ main(int argc, char** argv)
 	lns = NULL;
 	lns_l = 0;
 	lns_sz = 0;
-	filename = NULL;
 	mod = MOD_NAV;
 	off_x = 0;
 	off_y = 0;
