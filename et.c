@@ -1001,6 +1001,43 @@ scrl_dwn()
 }
 
 /*
+ * Scroll `SCRL_LN' lines up.
+ */
+void
+scrl_up()
+{
+	/* How many lines to actually scroll up. */
+	size_t scrl_n;
+	
+	/*
+	 * If we're on the first possible screen, then we
+	 * physically can not scroll up.
+	 */
+	if (off_y == 0)
+		return;
+	
+	if (off_y < SCRL_LN)
+		scrl_n = off_y;
+	else
+		scrl_n = SCRL_LN;
+	
+	if (curs_y+scrl_n > ws_row-1) {
+		curs_x = 1;
+		curs_y = ws_row+1;
+		ln_x = 0;
+		ln_y = ws_row-1;
+	}
+	else {
+		curs_y += scrl_n;
+		ln_y += scrl_n;
+	}
+	
+	off_y -= scrl_n;
+	dpl_pg();
+	SYNC_CURS();
+}
+
+/*
  * Escape to the ``cmd'' prompt: move cursor to the ``cmd'',
  * line, erase it, save the previous cursor position for
  * ``nav'' mode (to restore it later) and print the ":" -
@@ -1243,8 +1280,11 @@ handle_char(char c)
 			break;
 		}
 		break;
-	default:
-		dprintf(2, "char: %d.\n", c);
+	case CTRL('k'):
+		if (mod == MOD_NAV) {
+			scrl_up();
+			break;
+		}
 		break;
 	}
 }
