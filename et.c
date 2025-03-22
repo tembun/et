@@ -827,6 +827,7 @@ nav_right()
 	 */
 	US step;
 	
+	/* If it's not the last line character, just move right. */
 	if (LN_X != lns[LN_Y]->l) {
 		if (lns[LN_Y]->str[LN_X] != '\t')
 			step = 1;
@@ -870,6 +871,7 @@ nav_right()
 void
 nav_left()
 {
+	/* If it is not the first line character, then move left. */
 	if (LN_X != 0) {
 		/* See at `nav_right'. */
 		US step;
@@ -882,13 +884,27 @@ nav_left()
 			step = curs_x - char2col(LN_Y, LN_X);
 		MV_CURS_L(step);
 	}
-	/*
-	 * Go to the end of a previous line.
-	 */
+	/* If the line is not the first in the buffer. */
 	else if (LN_Y != 0) {
-		ln_y--;
+		/* Will we do scroll. */
+		char scrl;
+		
+		/*
+		 * We do scroll if it's the first visible
+		 * line on the screen.
+		 */
+		scrl = ln_y == 0;
+		
+		if (scrl) {
+			off_y--;
+			dpl_pg();
+		}
+		else {
+			ln_y--;
+			curs_y--;
+		}
+		
 		ln_x = lns[LN_Y]->l;
-		curs_y--;
 		curs_x = char2col(LN_Y, LN_X);
 		SYNC_CURS();
 	}
