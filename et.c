@@ -1016,17 +1016,31 @@ scrl_up()
 	if (off_y == 0)
 		return;
 	
+	/*
+	 * If we're going to scroll too much up (and cross the
+	 * first line), then scroll until first line is the
+	 * first on the screen and stop.
+	 */
 	if (off_y < SCRL_LN)
 		scrl_n = off_y;
 	else
 		scrl_n = SCRL_LN;
 	
+	/*
+	 * If cursor is about to linger in the bottom (being
+	 * not visible), then manually put in at the first
+	 * character of a last visible line after scrolling.
+	 */
 	if (curs_y+scrl_n > ws_row-1) {
 		curs_x = 1;
 		curs_y = ws_row+1;
 		ln_x = 0;
 		ln_y = ws_row-1;
 	}
+	/*
+	 * Otherwise, keep the cursor at the same position
+	 * (compensating the scrolling).
+	 */
 	else {
 		curs_y += scrl_n;
 		ln_y += scrl_n;
