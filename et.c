@@ -36,6 +36,8 @@ typedef unsigned short US;
  * It makes sense to keep in in sync with your terminal emulator settings.
  */
 #define TABSIZE 8
+/* How many lines do we scroll down/up. */
+#define SCRL_LN 8
 
 /* `ESC'. */
 #define ESC 27
@@ -946,6 +948,36 @@ nav_up()
 }
 
 /*
+ * Scroll screen `SCRL_LN' lines down.
+ */
+void
+scrl_dwn()
+{
+	/* Last visible line index of the screen. */
+	size_t last_ln = off_y+ws_row-1;
+	/* How many lines to _actually_ scroll. */
+	size_t  scrl_n;
+	
+	if (last_ln+SCRL_LN >= lns_l)
+		scrl_n = lns_l-1 - last_ln;
+	else
+		scrl_n = SCRL_LN;
+	
+	if (scrl_n > ln_y || curs_y-scrl_n < BUF_ROW) {
+		curs_x = 1;
+		curs_y = BUF_ROW;
+		ln_x = 0;
+		ln_y = 0;
+	}
+	else
+		curs_y -= scrl_n;
+	
+	off_y += scrl_n;	
+	dpl_pg();
+	SYNC_CURS();
+}
+
+/*
  * Escape to the ``cmd'' prompt: move cursor to the ``cmd'',
  * line, erase it, save the previous cursor position for
  * ``nav'' mode (to restore it later) and print the ":" -
@@ -1181,6 +1213,16 @@ handle_char(char c)
 			nav_up();
 			break;
 		}
+		break;
+	case CTRL('l'):
+		if (mod == MOD_NAV) {
+			scrl_dwn();
+			break;
+		}
+		break;
+	default:
+		dprintf(2, "char: %d.\n", c);
+		break;
 	}
 }
 
