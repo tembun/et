@@ -63,6 +63,8 @@ typedef unsigned short US;
 #define VID_RST_CMD "\x1b[0m"
 /* Erase the whole screen contents. */
 #define ERS_ALL_CMD "\x1b[2J"
+/* Erase forward to the end of screen. */
+#define ERS_FWD_CMD "\x1b[J"
 /* Erase the entire line. */
 #define ERS_LINE_ALL_CMD "\x1b[2K"
 /* Erase line forward. */
@@ -96,18 +98,18 @@ typedef unsigned short US;
 /* Move cursor right `C' columns. */
 #define MV_CURS_R(C) do {	\
 	curs_x += C;		\
-	MV_CURS(curs_y, curs_x);\
+	SYNC_CURS();		\
 } while (0)
 
 /* Move cursor `C' columns left. */
 #define MV_CURS_L(C) do {	\
 	curs_x -= C;		\
-	MV_CURS(curs_y, curs_x);\
+	SYNC_CURS();\
 } while (0)
 
 /*
  * Move cursor safely: remember current cursor position before
- * changing it.  The further manual call of `RST_CURS' implied.
+ * changing it.  The further manual call of `RST_CURS' is expected.
  */
 #define MV_CURS_SF(R, C) do {	\
 	prev_curs_x = curs_x;	\
@@ -121,6 +123,7 @@ typedef unsigned short US;
 #define RST_CURS() MV_CURS(prev_curs_y, prev_curs_x)
 
 #define ERS_ALL() dprintf(STDOUT_FILENO, ERS_ALL_CMD)
+#define ERS_FWD() dprintf(STDOUT_FILENO, ERS_FWD_CMD)
 #define ERS_LINE_ALL() dprintf(STDOUT_FILENO, ERS_LINE_ALL_CMD)
 #define ERS_LINE_FWD() dprintf(STDOUT_FILENO, ERS_LINE_FWD_CMD)
 
@@ -682,7 +685,8 @@ dpl_pg()
 	
 	ln_num = lns_l - off_y;
 	
-	MV_CURS(BUF_ROW, 1);
+	MV_CURS_SF(BUF_ROW, 1);
+	ERS_FWD();
 	
 	/*
 	 * If lines can not fit the screen.
@@ -706,6 +710,8 @@ dpl_pg()
 	 */
 	for (i = 0; i < empt_num; ++i)
 		dprintf(STDOUT_FILENO, "~\n\r");
+	
+	RST_CURS();
 }
 
 /*
@@ -893,13 +899,29 @@ nav_dwn()
 void
 nav_up()
 {
-	if (ln_y != 0) {
+	/* Does scroll need to be used. */
+	char scrl;
+	
+	scrl = ln_y == 0 && LN_Y != 0;
+	
+	if (scrl)
+		off_y--;
+	
+	if (LN_Y != 0) {
 		US nw_curs_x;
 		
-		ln_y--;
-		curs_y--;
+		if (!scrl) {
+			curs_y--;
+			ln_y--;
+		}
 		ln_x = col2char(LN_Y, curs_x, &nw_curs_x);
 		curs_x = nw_curs_x;
+		if (!scrl)
+			SYNC_CURS();
+	}
+	
+	if (scrl) {
+		dpl_pg();
 		SYNC_CURS();
 	}
 }
@@ -907,7 +929,7 @@ nav_up()
 /*
  * Escape to the ``cmd'' prompt: move cursor to the ``cmd'',
  * line, erase it, save the previous cursor position for
- * ``nav'' mode (to restore it later) and print the ":" - 
+ * ``nav'' mode (to restore it later) and print the ":" -
  * the prompt itself.
  */
 void
