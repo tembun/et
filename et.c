@@ -775,7 +775,7 @@ col2char(size_t l_y, US col, US* res_col)
 	
 	x = 0;
 	curs_tmp = 1;
-	while (curs_tmp <= col && x < lns[l_y]->l) {
+	while (curs_tmp < col && x < lns[l_y]->l) {
 		if (lns[l_y]->str[x] != '\t')
 			++curs_tmp;
 		else {
