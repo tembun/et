@@ -153,6 +153,11 @@ typedef unsigned short US;
 	ERS_LINE_ALL();	\
 } while (0)
 
+#define SET_FILEPATH(N) do {				\
+	filepath = realloc(filepath, strlen(N)+1);	\
+	strcpy(filepath, N);				\
+} while (0)
+
 
 /* Main text line structure. */
 struct ln {
@@ -167,6 +172,9 @@ struct ln {
 char buf[IOBUF];
 /* Buffer for user commands.  Filled by `read_cmd'. */
 char cmd[IOBUF];
+
+/* The path of a file the buffer will be written to. */
+char* filepath;
 
 /* A list of text lines. */
 struct ln** lns;
@@ -312,6 +320,7 @@ void
 free_all()
 {
 	free_lns();
+	free(filepath);
 }
 
 /*
@@ -549,6 +558,8 @@ handle_filepath(char* path)
 	
 	if (close(fd) == -1)
 		die("can not close the file.\n");
+	
+	SET_FILEPATH(path);
 }
 
 /*
@@ -1301,6 +1312,7 @@ main(int argc, char** argv)
 	off_y = 0;
 	ln_x = 0;
 	ln_y = 0;
+	filepath = NULL;
 	
 	expand_lns(0);
 	
