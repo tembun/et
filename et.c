@@ -1033,12 +1033,31 @@ scrl_up(size_t scrl_ln)
 
 /*
  * Scroll to the end of text (so that the last text line is
- * the last visible one).
+ * the last visible one) and also set the cursor to the last
+ * character in the text.
  */
 void
 scrl_end()
 {
-	scrl_dwn(lns_l-1-LN_Y);
+	/* If cursor is currently not on the last text character. */
+	if (LN_Y != lns_l-1 || LN_X != lns[lns_l-1]->l) {
+		ln_y = ws_row-1;
+		ln_x = lns[lns_l-1]->l;
+		curs_y = ws_row;
+		curs_x = char2col(lns_l-1, lns[lns_l-1]->l);
+	}
+	
+	/* If we need to do actual scroll. */
+	if (off_y != lns_l - ws_row) {
+		off_y = lns_l - ws_row;
+		dpl_pg();
+	}
+	/*
+	 * Sync cursor even if it is not necessary, to keep
+	 * things simple.
+	 */
+	else
+		SYNC_CURS();
 }
 
 /*
@@ -1048,9 +1067,7 @@ scrl_end()
 void
 scrl_start()
 {
-	/*
-	 * If we need to set cursor to the begining.
-	 */
+	/* If cursor is not currently at first text character. */
 	if (LN_Y != 0 || LN_X != 0) {
 		ln_x = 0;
 		ln_y = 0;
