@@ -1363,8 +1363,8 @@ jmp_ln(size_t ln_num)
 	}
 	else {
 		off_y = ln_num - top_off;
-		ln_y = top_off;
-		nav_curs_y = top_off + 1;
+		ln_y = top_off - 1;
+		nav_curs_y = top_off;
 	}
 	
 	ln_x = 0;
