@@ -1108,6 +1108,21 @@ nav_ln_start()
 }
 
 /*
+ * Navigate to the line end.
+ */
+void
+nav_ln_end()
+{
+	/* Skip if we're already there. */
+	if (LN_X == lns[LN_Y]->l)
+		return;
+	
+	ln_x = lns[LN_Y]->l;
+	curs_x = char2col(LN_Y, lns[LN_Y]->l);
+	SYNC_CURS();
+}
+
+/*
  * Escape to the ``cmd'' prompt: move cursor to the ``cmd'',
  * line, erase it, save the previous cursor position for
  * ``nav'' mode (to restore it later) and print the ":" -
@@ -1530,6 +1545,12 @@ handle_char(char c)
 	case 'a':
 		if (mod == MOD_NAV) {
 			nav_ln_start();
+			break;
+		}
+		break;
+	case 'd':
+		if (mod == MOD_NAV) {
+			nav_ln_end();
 			break;
 		}
 		break;
