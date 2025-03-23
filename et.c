@@ -1264,9 +1264,76 @@ read_cmd()
 }
 
 /*
+ * Jump (i.e. go) to the line number (counting from 1) so that
+ * it is situated in the center of a screen (if it can be).
+ */
+void
+jmp_ln(size_t ln_num)
+{
+	US top_off;
+	
+	/* Don't do anything if we're already there. */
+	if (LN_Y == ln_num - 1)
+		return;
+	
+	top_off = ws_row / 2;
+	/*
+	 * If line can't be centered (somewhat line in the begining
+	 * of the text), the do not center it and display first
+	 * screen possible.
+	 */
+	if (ln_num <= top_off) {
+		off_y = 0;
+		ln_y = ln_num - 1;
+		nav_curs_y = ln_num;
+	}
+	else {
+		off_y = ln_num - top_off;
+		ln_y = top_off;
+		nav_curs_y = top_off + 1;
+	}
+	
+	ln_x = 0;
+	/*
+	 * Set `nav_curs_x', not `curs_x', because this is a
+	 * ``cmd'' command and after `nav_curs_x' tells where
+	 * to put cursor after quitting the prompt.
+	 */
+	nav_curs_x = 1;
+	
+	dpl_pg();
+}
+
+/*
+ * Parse and execute the ``jump-to-line'' command.
+ * Return format is the same as for `do_cmd'.
+ */
+int
+do_jmp_ln()
+{
+	size_t ln_num;
+	char* cmdp = &cmd[1];
+	
+	ln_num = strtol(cmdp, &cmdp, 10);
+	if (ln_num == 0 || *cmdp != '\n')
+		return -1;
+	
+	/*
+	 * Here we can be sure that there is _not_ a negative
+	 * or zero value in `ln_num', so we need to check only
+	 * for out-of-last-line overflow.
+	 */
+	if (ln_num > lns_l)
+		return -1;
+	
+	jmp_ln(ln_num);
+	return 0;
+}
+
+/*
  * Execute the command, read by `read_cmd' into `cmd' buffer.
  * Returns `0' if command is successfull and we need to immediately
- * clean the ``cmd'' line up.
+ * quit the ``cmd'' prompt.
  * Returns `1' if the command is OK,
  * but we do _not_ need to clean things up.  It is for commands
  * which outputs the text to the ``cmd'' as a result of execution.
@@ -1290,6 +1357,8 @@ do_cmd()
 		case 'f':
 			dpl_cmd_txt(filepath);
 			return 1;
+		case 'j':
+			return do_jmp_ln();
 		default:
 			return -1;
 		}
@@ -1340,7 +1409,7 @@ handle_char(char c)
 			dpl_cmd_txt("Sorry.");
 			break;
 		case 0:
-			CLN_CMD();
+			quit_cmd();
 			break;
 		/* `1' means we don't need to do anything. */
 		}
