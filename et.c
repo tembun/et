@@ -1092,6 +1092,22 @@ scrl_start()
 }
 
 /*
+ * Navigate to the line start.
+ */
+void
+nav_ln_start()
+{
+	/* Skip if we're already there. */
+	if (LN_X == 0)
+		return;
+	
+	off_x = 0;
+	ln_x = 0;
+	curs_x = 1;
+	SYNC_CURS();
+}
+
+/*
  * Escape to the ``cmd'' prompt: move cursor to the ``cmd'',
  * line, erase it, save the previous cursor position for
  * ``nav'' mode (to restore it later) and print the ":" -
@@ -1508,6 +1524,12 @@ handle_char(char c)
 	case '<':
 		if (mod == MOD_NAV) {
 			scrl_start();
+			break;
+		}
+		break;
+	case 'a':
+		if (mod == MOD_NAV) {
+			nav_ln_start();
 			break;
 		}
 		break;
