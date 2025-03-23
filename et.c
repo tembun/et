@@ -928,10 +928,10 @@ nav_up()
 }
 
 /*
- * Scroll screen `SCRL_LN' lines down.
+ * Scroll screen `scrl_ln' lines down.
  */
 void
-scrl_dwn()
+scrl_dwn(size_t scrl_ln)
 {
 	/* Last visible line index of the screen. */
 	size_t last_ln = off_y+ws_row-1;
@@ -949,10 +949,10 @@ scrl_dwn()
 	 * If we want to scroll out of screen scroll until
 	 * the last text line will be the last screen line.
 	 */
-	if (last_ln+SCRL_LN >= lns_l)
+	if (last_ln+scrl_ln >= lns_l)
 		scrl_n = lns_l-1 - last_ln;
 	else
-		scrl_n = SCRL_LN;
+		scrl_n = scrl_ln;
 	
 	/*
 	 * If current cursor position will not survive scrolling
@@ -981,10 +981,10 @@ scrl_dwn()
 }
 
 /*
- * Scroll `SCRL_LN' lines up.
+ * Scroll `scrl_ln' lines up.
  */
 void
-scrl_up()
+scrl_up(size_t scrl_ln)
 {
 	/* How many lines to actually scroll up. */
 	size_t scrl_n;
@@ -1001,10 +1001,10 @@ scrl_up()
 	 * first line), then scroll until first line is the
 	 * first on the screen and stop.
 	 */
-	if (off_y < SCRL_LN)
+	if (off_y < scrl_ln)
 		scrl_n = off_y;
 	else
-		scrl_n = SCRL_LN;
+		scrl_n = scrl_ln;
 	
 	/*
 	 * If cursor is about to linger in the bottom (being
@@ -1029,6 +1029,25 @@ scrl_up()
 	off_y -= scrl_n;
 	dpl_pg();
 	SYNC_CURS();
+}
+
+/*
+ * Scroll to the end of text (so that the last text line is
+ * the last visible one).
+ */
+void
+scrl_end()
+{
+	scrl_dwn(lns_l-1-LN_Y);
+}
+
+/*
+ * Scroll to the start of text.
+ */
+void
+scrl_start()
+{
+	scrl_up(LN_Y);
 }
 
 /*
@@ -1314,13 +1333,25 @@ handle_char(char c)
 		break;
 	case CTRL('l'):
 		if (mod == MOD_NAV) {
-			scrl_dwn();
+			scrl_dwn(SCRL_LN);
 			break;
 		}
 		break;
 	case CTRL('k'):
 		if (mod == MOD_NAV) {
-			scrl_up();
+			scrl_up(SCRL_LN);
+			break;
+		}
+		break;
+	case '>':
+		if (mod == MOD_NAV) {
+			scrl_end();
+			break;
+		}
+		break;
+	case '<':
+		if (mod == MOD_NAV) {
+			scrl_start();
 			break;
 		}
 		break;
