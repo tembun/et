@@ -1042,12 +1042,33 @@ scrl_end()
 }
 
 /*
- * Scroll to the start of text.
+ * Scroll to the start of text and set the cursor to the first
+ * text character.
  */
 void
 scrl_start()
 {
-	scrl_up(LN_Y);
+	/*
+	 * If we need to set cursor to the begining.
+	 */
+	if (LN_Y != 0 || LN_X != 0) {
+		ln_x = 0;
+		ln_y = 0;
+		curs_x = 1;
+		curs_y = 1;
+	}
+	
+	/* If we need to do actual scroll and redraw page. */
+	if (off_y != 0) {
+		off_y = 0;
+		dpl_pg();
+	}
+	/*
+	 * Synchronize cursor even in case it's not needed (if
+	 * cursor is already at (1,1)), but it keeps simple.
+	 */
+	else
+		SYNC_CURS();
 }
 
 /*
