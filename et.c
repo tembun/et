@@ -158,6 +158,9 @@ typedef unsigned short US;
 	strcpy(filepath, N);				\
 } while (0)
 
+/* Is `C' a valid name for a line mark. */
+#define IS_MARK(C) ((C >= 'A' && C <= 'Z') || (C >= 'a' && C <= 'z'))
+
 
 /* Main text line structure. */
 struct ln {
@@ -1264,6 +1267,51 @@ read_cmd()
 }
 
 /*
+ * Parse and execute ``mark-line'' command.
+ * Format of a return value the same as for `do_cmd'.
+ * --
+ * A mark itself is expected to be in `cmd[1]'.
+ */
+int
+do_mark_ln()
+{
+	size_t i;
+	
+	if (!(IS_MARK(cmd[1])))
+		return -1;
+	
+	/*
+	 * If another line already has this mark, remove it
+	 * from it (i.e. reassign mark to current line).
+	 */
+	for (i = 0; i < lns_l; ++i) {
+		if (lns[i]->mark == cmd[1]) {
+			lns[i]->mark = 0;
+			break;
+		}
+	}
+	
+	lns[LN_Y]->mark = cmd[1];
+	return 0;
+}
+
+/*
+ * Get line number by mark.
+ */
+ssize_t
+mark2ln(char mark)
+{
+	size_t i;
+	
+	for (i = 0; i < lns_l; ++i) {
+		if (lns[i]->mark == mark)
+			return i;
+	}
+	
+	return -1;
+}
+
+/*
  * Jump (i.e. go) to the line number (counting from 1) so that
  * it is situated in the center of a screen (if it can be).
  */
@@ -1315,8 +1363,12 @@ do_jmp_ln()
 	char* cmdp = &cmd[1];
 	
 	ln_num = strtol(cmdp, &cmdp, 10);
-	if (ln_num == 0 || *cmdp != '\n')
-		return -1;
+	if (ln_num == 0) {
+		if (IS_MARK(*cmdp) && *(cmdp+1) == '\n')
+			ln_num = mark2ln(*cmdp);
+		else
+			return -1;
+	}
 	
 	/*
 	 * Here we can be sure that there is _not_ a negative
@@ -1359,6 +1411,8 @@ do_cmd()
 			return 1;
 		case 'j':
 			return do_jmp_ln();
+		case 'k':
+			return do_mark_ln();
 		default:
 			return -1;
 		}
