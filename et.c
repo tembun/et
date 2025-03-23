@@ -172,6 +172,15 @@ struct ln {
 char buf[IOBUF];
 /* Buffer for user commands.  Filled by `read_cmd'. */
 char cmd[IOBUF];
+/* Text that is right now displayed as a result of executing a command. */
+char* cmd_txt;
+/*
+ * Current character index for `cmd'.
+ * It is primarily used in `read_cmd', but we make it global because
+ * we also need it as an indicator of an entered command length, to
+ * redraw the prompt if we need (e.g. on window resize).
+ */
+int cmd_i;
 
 /* The path of a file the buffer will be written to. */
 char* filepath;
@@ -321,6 +330,7 @@ free_all()
 {
 	free_lns();
 	free(filepath);
+	free(cmd_txt);
 }
 
 /*
@@ -409,47 +419,6 @@ set_raw()
 	/* Apply all changes we have just done. */
 	if (tcsetattr(STDOUT_FILENO, TCSANOW, &tos) == -1)
 		die("can not set terminal attributes.\n");
-}
-
-/*
- * Obtain information about terminal window size.
- */
-void
-get_win_sz()
-{
-	struct winsize win_sz;
-	
-	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win_sz) == -1)
-		die("can not obtain the terminal window size.\n");
-	
-	/*
-	 * One line (at the bottom) is for entering commands and
-	 * status bar.
-	 */
-	ws_row = win_sz.ws_row - 1;
-	ws_col = win_sz.ws_col;
-}
-
-/*
- * Set up a routine that will update window size information every
- * time it changes.
- */
-void
-init_win_sz()
-{
-	struct sigaction sa;
-	
-	get_win_sz();
-	
-	/*
-	 * It is important to initialize all fields for `sa',
-	 * because otherwise they are filled with random
-	 * values and it may (and will) lead to `EINVAL'.
-	 */
-	sa.sa_handler = get_win_sz;
-	sa.sa_flags = 0;
-	sigemptyset(&sa.sa_mask);
-	sigaction(SIGWINCH, &sa, NULL);
 }
 
 /*
@@ -587,11 +556,34 @@ print_status()
 	 */
 	MV_CURS_SF(ws_row+1, 4);
 	/*
-	 * Print an 80-character (3 characters are for mode name)
+	 * Print an 80-characters (3 characters are for mode name)
 	 * long line (in reverse mode) as a ruler.
 	 */
 	WR_REV_VID(%*s, 77, "");
 	RST_CURS();
+}
+
+/*
+ * Redraw a ``cmd'' line with its current state (command that is
+ * currently typed here or a result of a command, that is displayed
+ * on the screen.
+ */
+void
+print_cmd()
+{
+	CLN_CMD();
+	/*
+	 * If right now there is a text printed as a result of a
+	 * previous command, we re-print that again, otherwise,
+	 * we print the command (not completed yet) that was in
+	 * the process of typing before we called this function.
+	 */
+	if (cmd_txt == NULL) {		
+		PRINT_CHAR(":");
+		write(STDOUT_FILENO, &cmd, cmd_i);
+	}
+	else
+		WR_REV_VID(%s, cmd_txt);
 }
 
 /*
@@ -1048,6 +1040,25 @@ scrl_up()
 void
 esc_cmd()
 {
+	/*
+	 * At this moment we don't need to store previous
+	 * command result text (if it was) anymore.
+	 */
+	free(cmd_txt);
+	cmd_txt = NULL;
+	
+	/*
+	 * We zero the first `cmd' character in case we receive a
+	 * `SIGWINCH' before starting entering a new command.  This
+	 * will lead to the situation where _previous_ `cmd' will be
+	 * written to the ``cmd'' line instead of an empty prompt.
+	 */
+	cmd[0] = '\0';
+	
+	/*
+	 * Save current text-cursor position to restore it when we
+	 * quit the ``cmd''.
+	 */
 	if (mod == MOD_NAV) {
 		nav_curs_x = curs_x;
 		nav_curs_y = curs_y;
@@ -1078,6 +1089,13 @@ quit_cmd()
 void
 dpl_cmd_txt(char* msg)
 {
+	/*
+	 * We need to save the printed message in case we'll
+	 * need to redraw it (e.g. in case of `SIGWINCH').
+	 */
+	cmd_txt = realloc(cmd_txt, strlen(msg)+1);
+	strcpy(cmd_txt, msg);
+	
 	CLN_CMD();
 	WR_REV_VID(%s, msg);
 }
@@ -1099,8 +1117,6 @@ dpl_cmd_txt(char* msg)
 int
 read_cmd()
 {
-	/* Index of current `cmd' character. */
-	int cmd_i;
 	/*
 	 * Flag if it is a first read _printable_ character.  I.e. the
 	 * first character that will appear in `cmd'.
@@ -1137,7 +1153,11 @@ read_cmd()
 					/*
 					 * Pretend that this loop has just
 					 * begun.
+					 * --
+					 * See comments in `esc_cmd' regarding
+					 * zeroing the `cmd'.
 					 */
+					cmd[0] = '\0';
 					cmd_i = 0;
 					first = 1;
 					continue;
@@ -1313,9 +1333,75 @@ handle_char(char c)
 void
 input_loop()
 {
-	while (read(STDIN_FILENO, &buf, 1) > 0) {
-		handle_char(*buf);
+	while (1) {
+		while (read(STDIN_FILENO, &buf, 1) > 0) {
+			handle_char(*buf);
+		}
 	}
+}
+
+/*
+ * Obtain information about terminal window size.
+ */
+void
+get_win_sz()
+{
+	struct winsize win_sz;
+	
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win_sz) == -1)
+		die("can not obtain the terminal window size.\n");
+	
+	/*
+	 * One line (at the bottom) is for entering commands and
+	 * status bar.
+	 */
+	ws_row = win_sz.ws_row - 1;
+	ws_col = win_sz.ws_col;
+}
+
+/*
+ * Take an action when window resizes.
+ */
+void
+handle_sigwinch()
+{
+	get_win_sz();
+	/*
+	 * If current cursor position will not be visible after
+	 * resizing (more accurately, shrinking) the window, we
+	 * scroll so that the current line on which the cursor
+	 * is is on the last visible line.
+	 */
+	if (ln_y >= ws_row) {
+		off_y += (ln_y - ws_row+1);
+		ln_y = ws_row-1;
+		curs_y = ws_row;
+	}
+	dpl_pg();
+	if (mod == MOD_CMD)
+		print_cmd();
+}
+
+/*
+ * Set up a routine that will update window size information every
+ * time it changes.
+ */
+void
+init_win_sz()
+{
+	struct sigaction sa;
+	
+	get_win_sz();
+	
+	/*
+	 * It is important to initialize all fields for `sa',
+	 * because otherwise they are filled with random
+	 * values and it may (and will) lead to `EINVAL'.
+	 */
+	sa.sa_handler = handle_sigwinch;
+	sa.sa_flags = 0;
+	sigemptyset(&sa.sa_mask);
+	sigaction(SIGWINCH, &sa, NULL);
 }
 
 /*
