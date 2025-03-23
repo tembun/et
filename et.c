@@ -239,8 +239,8 @@ US ws_col;
  * (`ln_x').  Thus, they are limited to the screen.  To get actual offsets
  * within the `lns', use `LN_X' and `LN_Y'.
  */
-size_t ln_x;
-size_t ln_y;
+US ln_x;
+US ln_y;
 
 /*
  * Horizontal and vertical offsets of a lines in the screen.
