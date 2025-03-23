@@ -1194,13 +1194,16 @@ read_cmd()
 		if (read(STDIN_FILENO, &buf, 1) > 0) {
 			switch (*buf) {
 			/*
-			 * If we meet `ESC' in the input there are two cases:
+			 * If we meet `ESC' or `Backspace' or `DEL' in the
+			 * input there are two cases:
 			 *     1) It is the first character.
 			 *     2) It is in the middle of an input.
 			 * In case 1) we quit the prompt, and in case 2) we
-			 * clean the ``cmd'' input up but keep staying there.
+			 * discard the text in the prompt that we've entered.
 			 */
 			case ESC:
+			case BSP:
+			case DEL:
 				if (first)
 					return 1;
 				else {
@@ -1222,14 +1225,6 @@ read_cmd()
 					first = 1;
 					continue;
 				}
-			/*
-			 * These decline the input only if they're first.
-			 */
-			case DEL:
-			case BSP:
-				if (first)
-					return 1;
-				break;
 			/*
 			 * `\r' is mapped to `\n' manually.
 			 */
