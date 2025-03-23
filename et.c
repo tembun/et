@@ -154,7 +154,7 @@ typedef unsigned short US;
 } while (0)
 
 #define SET_FILEPATH(N) do {				\
-	filepath = realloc(filepath, strlen(N)+1);	\
+	filepath = srealloc(filepath, strlen(N)+1);	\
 	strcpy(filepath, N);				\
 } while (0)
 
@@ -1093,7 +1093,7 @@ dpl_cmd_txt(char* msg)
 	 * We need to save the printed message in case we'll
 	 * need to redraw it (e.g. in case of `SIGWINCH').
 	 */
-	cmd_txt = realloc(cmd_txt, strlen(msg)+1);
+	cmd_txt = srealloc(cmd_txt, strlen(msg)+1);
 	strcpy(cmd_txt, msg);
 	
 	CLN_CMD();
