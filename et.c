@@ -909,33 +909,26 @@ nav_dwn()
 {
 	/* Is using scroll. */
 	char scrl;
+	US nw_curs_x;
 	
-	scrl = ln_y == ws_row-1 && LN_Y != lns_l-1;
-	
-	/* Not last line of a _text_. */
-	if (LN_Y != lns_l-1) {
-		US nw_curs_x;
-		
-		if (scrl)
-			off_y++;
-		else {
-			ln_y++;
-			curs_y++;
-		}
-		ln_x = col2char(LN_Y, curs_x, &nw_curs_x);
-		curs_x = nw_curs_x;
-		
-		if (!scrl)
-			SYNC_CURS();
-	}
-	/* We physically can not move cursor down then. */
-	else
+	/* If last line of a _text_. */
+	if (LN_Y == lns_l-1)
 		return;
 	
-	if (scrl) {
-		dpl_pg();
-		SYNC_CURS();
+	scrl = ln_y == ws_row-1;
+	
+	if (scrl)
+		off_y++;
+	else {
+		ln_y++;
+		curs_y++;
 	}
+	ln_x = col2char(LN_Y, curs_x, &nw_curs_x);
+	curs_x = nw_curs_x;
+		
+	if (scrl)
+		dpl_pg();	
+	SYNC_CURS();
 	
 	need_print_pos = 1;
 }
@@ -949,31 +942,27 @@ nav_up()
 	/* Does scroll need to be used. */
 	char scrl;
 	
-	scrl = ln_y == 0 && LN_Y != 0;
-	
-	/* Not a first line in the _text_. */
-	if (LN_Y != 0) {
-		US nw_curs_x;
-		
-		if (scrl)
-			off_y--;
-		else {
-			curs_y--;
-			ln_y--;
-		}
-		ln_x = col2char(LN_Y, curs_x, &nw_curs_x);
-		curs_x = nw_curs_x;
-		if (!scrl)
-			SYNC_CURS();
-	}
-	/* We're on the first line - stay still. */
-	else
+	/* If first line of a _text_. */
+	if (LN_Y == 0)
 		return;
+	
+	scrl = ln_y == 0;
+	
+	US nw_curs_x;
+	
+	if (scrl)
+		off_y--;
+	else {
+		curs_y--;
+		ln_y--;
+	}
+	ln_x = col2char(LN_Y, curs_x, &nw_curs_x);
+	curs_x = nw_curs_x;
 	
 	if (scrl) {
 		dpl_pg();
-		SYNC_CURS();
 	}
+	SYNC_CURS();
 	
 	need_print_pos = 1;
 }
