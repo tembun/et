@@ -1592,13 +1592,13 @@ handle_char(char c)
 			break;
 		}
 		break;
-	case 'a':
+	case CTRL('a'):
 		if (mod == MOD_NAV) {
 			nav_ln_start();
 			break;
 		}
 		break;
-	case 'd':
+	case CTRL('d'):
 		if (mod == MOD_NAV) {
 			nav_ln_end();
 			break;
