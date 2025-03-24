@@ -1173,7 +1173,7 @@ nav_ln_end()
 }
 
 /*
- * Navigate to the start of a next word.
+ * Navigate to the next word-boundary..
  * The ``word'' is defined as a sequence of characters
  * that doesn't contain whitespace, tabs, newlines,
  * dashes, underscores and newlines.
@@ -1184,8 +1184,10 @@ nav_word_nx()
 	size_t i;
 	size_t nav_char;
 	US nav_col;
+	char first;
 	
 	nav_char = 0;
+	first = 1;
 	
 	/* If we're at the end of line. */
 	if (LN_X == lns[LN_Y]->l) {
@@ -1200,7 +1202,7 @@ nav_word_nx()
 		return;
 	}
 	
-	for (i = LN_X; i <= lns[LN_Y]->l; ++i) {
+	for (i = LN_X; i <= lns[LN_Y]->l; (++i, first = 0)) {
 		if (i == lns[LN_Y]->l) {
 			nav_char = i;
 			break;
@@ -1211,10 +1213,17 @@ nav_word_nx()
 		case '-':
 		case '_':
 			/*
-			 * We've checked that `i' does not overflow
-			 * the length above.
+			 * Implement navigating to the word boundaries.
 			 */
-			nav_char = i+1;
+			if (!first)
+				nav_char = i;
+			else {
+				/* Jump through the repeated separators. */
+				while (i != lns[LN_Y]->l-1 &&
+				    lns[LN_Y]->str[i+1] == lns[LN_Y]->str[i])
+					++i;
+				nav_char = i+1;
+			}
 			goto out;
 		}
 	}
@@ -1228,7 +1237,7 @@ out:
 }
 
 /*
- * Navigate to the end of a previous word.
+ * Navigate to the previous word-boundary.
  * See the definition of ``word'' in `nav_word_nx'.
  */
 void
@@ -1237,8 +1246,10 @@ nav_word_pr()
 	size_t i;
 	size_t nav_char;
 	US nav_col;
+	char first;
 	
 	nav_char = 0;
+	first = 1;
 	
 	/* If we're at the first line character. */
 	if (LN_X == 0) {
@@ -1250,7 +1261,7 @@ nav_word_pr()
 		return;
 	}
 	
-	for (i = LN_X; i >= 0; --i) {
+	for (i = LN_X-1; i >= 0; (--i, first = 0)) {
 		if (i == 0) {
 			nav_char = 0;
 			break;
@@ -1260,8 +1271,18 @@ nav_word_pr()
 		case '\t':
 		case '-':
 		case '_':
-			/* We've checked that `i' is not 0. */
-			nav_char = i - 1;
+			/*
+			 * Implement navigating to the word boundaries.
+			 */
+			if (!first)
+				nav_char = i+1;
+			else {
+				/* Jump through the repeated separators. */
+				while (i != 0 &&
+				    lns[LN_Y]->str[i-1] == lns[LN_Y]->str[i])
+					--i;
+				nav_char = i;
+			}
 			goto out;
 		}
 	}
