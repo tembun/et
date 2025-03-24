@@ -1173,6 +1173,108 @@ nav_ln_end()
 }
 
 /*
+ * Navigate to the start of a next word.
+ * The ``word'' is defined as a sequence of characters
+ * that doesn't contain whitespace, tabs, newlines,
+ * dashes, underscores and newlines.
+ */
+void
+nav_word_nx()
+{
+	size_t i;
+	size_t nav_char;
+	US nav_col;
+	
+	nav_char = 0;
+	
+	/* If we're at the end of line. */
+	if (LN_X == lns[LN_Y]->l) {
+		/* We're at the end of text - can't move further. */
+		if (LN_Y == lns_l - 1)
+			return;
+		/*
+		 * Otherwise navigating to the next word is equivalent
+		 * to plain navigating right.
+		 */
+		nav_right();
+		return;
+	}
+	
+	for (i = LN_X; i <= lns[LN_Y]->l; ++i) {
+		if (i == lns[LN_Y]->l) {
+			nav_char = i;
+			break;
+		}
+		switch (lns[LN_Y]->str[i]) {
+		case ' ':
+		case '\t':
+		case '-':
+		case '_':
+			/*
+			 * We've checked that `i' does not overflow
+			 * the length above.
+			 */
+			nav_char = i+1;
+			goto out;
+		}
+	}
+out:
+	nav_col = char2col(LN_Y, nav_char);
+	ln_x = nav_char;
+	curs_x = nav_col;
+	SYNC_CURS();
+	
+	need_print_pos = 1;
+}
+
+/*
+ * Navigate to the end of a previous word.
+ * See the definition of ``word'' in `nav_word_nx'.
+ */
+void
+nav_word_pr()
+{
+	size_t i;
+	size_t nav_char;
+	US nav_col;
+	
+	nav_char = 0;
+	
+	/* If we're at the first line character. */
+	if (LN_X == 0) {
+		/* If we're in the first text line - skip. */
+		if (LN_Y == 0)
+			return;
+		/* Otherwise, it's the same as navigate to the left. */
+		nav_left();
+		return;
+	}
+	
+	for (i = LN_X; i >= 0; --i) {
+		if (i == 0) {
+			nav_char = 0;
+			break;
+		}
+		switch (lns[LN_Y]->str[i]) {
+		case ' ':
+		case '\t':
+		case '-':
+		case '_':
+			/* We've checked that `i' is not 0. */
+			nav_char = i - 1;
+			goto out;
+		}
+	}
+out:
+	nav_col = char2col(LN_Y, nav_char);
+	ln_x = nav_char;
+	curs_x = nav_col;
+	SYNC_CURS();
+	
+	need_print_pos = 1;
+}
+
+/*
  * Escape to the ``cmd'' prompt: move cursor to the ``cmd'',
  * line, erase it, save the previous cursor position for
  * ``nav'' mode (to restore it later) and print the ":" -
@@ -1601,6 +1703,18 @@ handle_char(char c)
 	case CTRL('d'):
 		if (mod == MOD_NAV) {
 			nav_ln_end();
+			break;
+		}
+		break;
+	case 'd':
+		if (mod == MOD_NAV) {
+			nav_word_nx();
+			break;
+		}
+		break;
+	case 'a':
+		if (mod == MOD_NAV) {
+			nav_word_pr();
 			break;
 		}
 		break;
