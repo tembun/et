@@ -39,6 +39,11 @@ typedef unsigned short US;
 /* How many lines do we scroll down/up. */
 #define SCRL_LN 8
 
+/* The length of visual ``ruler'' to be printed in status line. */
+#define RULER 80
+/* The gap between mode name and cursor position reports in status line. */
+#define STATUS_GAP 3
+
 /* `ESC'. */
 #define ESC 27
 /* `Delete'. */
@@ -78,11 +83,13 @@ typedef unsigned short US;
 } while(0)
 
 /*
- * Write string `S' in reverse video mode and then exit it (mode).
- * `S' should be put in here _without_ double quotes.
+ * Write argument (as arguments for `dprintf') in reverse video mode
+ * and then exit it (mode).
  */
-#define WR_REV_VID(S, ...) do {						\
-	dprintf(STDOUT_FILENO, REV_VID_CMD #S VID_RST_CMD, __VA_ARGS__);\
+#define WR_REV_VID(...) do {			\
+	dprintf(STDOUT_FILENO, REV_VID_CMD);	\
+	dprintf(STDOUT_FILENO, __VA_ARGS__);	\
+	dprintf(STDOUT_FILENO, VID_RST_CMD);	\
 } while (0)
 
 #define MV_CURS(R, C) do {				\
@@ -254,6 +261,13 @@ US ln_y;
  */
 size_t off_x;
 size_t off_y;
+
+/*
+ * Set this flag up when an action that changes the cursor
+ * position has been done.
+ */
+char need_print_pos;
+
 
 /*
  * Print the error message with program's name prefix and exit.
@@ -542,28 +556,44 @@ print_mod()
 	MV_CURS_SF(ws_row+1, 1);
 	/* Erase the current mode. */
 	dprintf(STDOUT_FILENO, "   \r");
-	WR_REV_VID(%s, mod == MOD_NAV ? "NAV" : "EDT");
+	WR_REV_VID("%s", mod == MOD_NAV ? "NAV" : "EDT");
+	RST_CURS();
+}
+
+/*
+ * Display a current cursor coordinates.
+ * This function is the last one called in the `print_status',
+ * so it prints the trailing whitespaces to form an `RULER'
+ * characters long ruler.
+ */
+void
+print_pos()
+{
+	/*
+	 * Skip 3-characters long mode name.
+	 */
+	MV_CURS_SF(ws_row+1, 4);
+	ERS_LINE_FWD();
+	WR_REV_VID("%*s", RULER-3-STATUS_GAP, "");
+	RST_CURS();
+	MV_CURS_SF(ws_row+1, 4);
+	WR_REV_VID("%*s", STATUS_GAP, "");
+	WR_REV_VID("%zu, %zu", LN_Y+1, LN_X+1);
 	RST_CURS();
 }
 
 /*
  * Print the editor status-line, where editor mode dwells.
- * This is the same line that used for ``cmd'' prompt.
+ * Every function is called here writes the text in reverse
+ * video mode and the last function prints an empty tail of
+ * whitespaces (in reverse mode too) to form an `RULER'
+ * characters long ruler.
  */
 void
 print_status()
-{
+{	
 	print_mod();
-	/*
-	 * Put the cursor _after_ the mode name (3 characters).
-	 */
-	MV_CURS_SF(ws_row+1, 4);
-	/*
-	 * Print an 80-characters (3 characters are for mode name)
-	 * long line (in reverse mode) as a ruler.
-	 */
-	WR_REV_VID(%*s, 77, "");
-	RST_CURS();
+	print_pos();
 }
 
 /*
@@ -586,7 +616,7 @@ print_cmd()
 		write(STDOUT_FILENO, &cmd, cmd_i);
 	}
 	else
-		WR_REV_VID(%s, cmd_txt);
+		WR_REV_VID("%s", cmd_txt);
 }
 
 /*
@@ -814,6 +844,11 @@ nav_right()
 		}
 		SYNC_CURS();
 	}
+	/* Don't move cursor otherwise. */
+	else
+		return;
+	
+	need_print_pos = 1;
 }
 
 /*
@@ -859,6 +894,11 @@ nav_left()
 		curs_x = char2col(LN_Y, LN_X);
 		SYNC_CURS();
 	}
+	/* Don't move the cursor otherwise. */
+	else
+		return;
+	
+	need_print_pos = 1;
 }
 
 /*
@@ -889,11 +929,16 @@ nav_dwn()
 		if (!scrl)
 			SYNC_CURS();
 	}
+	/* We physically can not move cursor down then. */
+	else
+		return;
 	
 	if (scrl) {
 		dpl_pg();
 		SYNC_CURS();
 	}
+	
+	need_print_pos = 1;
 }
 
 /*
@@ -923,11 +968,16 @@ nav_up()
 		if (!scrl)
 			SYNC_CURS();
 	}
+	/* We're on the first line - stay still. */
+	else
+		return;
 	
 	if (scrl) {
 		dpl_pg();
 		SYNC_CURS();
 	}
+	
+	need_print_pos = 1;
 }
 
 /*
@@ -981,6 +1031,8 @@ scrl_dwn(size_t scrl_ln)
 	off_y += scrl_n;	
 	dpl_pg();
 	SYNC_CURS();
+	
+	need_print_pos = 1;
 }
 
 /*
@@ -1032,6 +1084,8 @@ scrl_up(size_t scrl_ln)
 	off_y -= scrl_n;
 	dpl_pg();
 	SYNC_CURS();
+	
+	need_print_pos = 1;
 }
 
 /*
@@ -1061,6 +1115,8 @@ scrl_end()
 	 */
 	else
 		SYNC_CURS();
+	
+	need_print_pos = 1;
 }
 
 /*
@@ -1070,13 +1126,14 @@ scrl_end()
 void
 scrl_start()
 {
-	/* If cursor is not currently at first text character. */
-	if (LN_Y != 0 || LN_X != 0) {
-		ln_x = 0;
-		ln_y = 0;
-		curs_x = 1;
-		curs_y = 1;
-	}
+	/* Skip if cursor's already on the first text line and character. */
+	if (LN_Y == 0 && LN_X == 0)
+		return;
+	
+	ln_x = 0;
+	ln_y = 0;
+	curs_x = 1;
+	curs_y = 1;
 	
 	/* If we need to do actual scroll and redraw page. */
 	if (off_y != 0) {
@@ -1089,6 +1146,8 @@ scrl_start()
 	 */
 	else
 		SYNC_CURS();
+	
+	need_print_pos = 1;
 }
 
 /*
@@ -1105,6 +1164,8 @@ nav_ln_start()
 	ln_x = 0;
 	curs_x = 1;
 	SYNC_CURS();
+	
+	need_print_pos = 1;
 }
 
 /*
@@ -1120,6 +1181,8 @@ nav_ln_end()
 	ln_x = lns[LN_Y]->l;
 	curs_x = char2col(LN_Y, lns[LN_Y]->l);
 	SYNC_CURS();
+	
+	need_print_pos = 1;
 }
 
 /*
@@ -1188,7 +1251,7 @@ dpl_cmd_txt(char* msg)
 	strcpy(cmd_txt, msg);
 	
 	CLN_CMD();
-	WR_REV_VID(%s, msg);
+	WR_REV_VID("%s", msg);
 }
 
 /*
@@ -1566,6 +1629,10 @@ input_loop()
 	while (1) {
 		while (read(STDIN_FILENO, &buf, 1) > 0) {
 			handle_char(*buf);
+			if (need_print_pos) {
+				print_pos();
+				need_print_pos= 0;
+			}
 		}
 	}
 }
@@ -1658,6 +1725,7 @@ main(int argc, char** argv)
 	ln_x = 0;
 	ln_y = 0;
 	filepath = NULL;
+	need_print_pos = 0;
 	
 	expand_lns(0);
 	
