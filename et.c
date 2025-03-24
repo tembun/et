@@ -912,14 +912,13 @@ nav_dwn()
 	
 	scrl = ln_y == ws_row-1 && LN_Y != lns_l-1;
 	
-	if (scrl)
-		off_y++;
-	
 	/* Not last line of a _text_. */
 	if (LN_Y != lns_l-1) {
 		US nw_curs_x;
 		
-		if (!scrl) {
+		if (scrl)
+			off_y++;
+		else {
 			ln_y++;
 			curs_y++;
 		}
@@ -952,14 +951,13 @@ nav_up()
 	
 	scrl = ln_y == 0 && LN_Y != 0;
 	
-	if (scrl)
-		off_y--;
-	
 	/* Not a first line in the _text_. */
 	if (LN_Y != 0) {
 		US nw_curs_x;
 		
-		if (!scrl) {
+		if (scrl)
+			off_y--;
+		else {
 			curs_y--;
 			ln_y--;
 		}
