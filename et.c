@@ -44,6 +44,13 @@ typedef unsigned short US;
 /* The gap between mode name and cursor position reports in status line. */
 #define STATUS_GAP 3
 
+/* A list of `case's for word-separators.  No ":" after last `case'. */
+#define CASE_SEPARATOR				\
+	case ' ': case '\t': case '_': case '-':\
+	case '.': case ':': case '=': case '+':	\
+	case '{': case '[': case '(': case '}':	\
+	case ']': case ')': case '*': case '|'	\
+
 /* `ESC'. */
 #define ESC 27
 /* `Delete'. */
@@ -1175,8 +1182,7 @@ nav_ln_end()
 /*
  * Navigate to the next word-boundary..
  * The ``word'' is defined as a sequence of characters
- * that doesn't contain whitespace, tabs, newlines,
- * dashes, underscores and newlines.
+ * that doesn't contain separators (see `CASE_SEPARATOR').
  */
 void
 nav_word_nx()
@@ -1208,10 +1214,7 @@ nav_word_nx()
 			break;
 		}
 		switch (lns[LN_Y]->str[i]) {
-		case ' ':
-		case '\t':
-		case '-':
-		case '_':
+		CASE_SEPARATOR:
 			/*
 			 * Implement navigating to the word boundaries.
 			 */
@@ -1267,10 +1270,7 @@ nav_word_pr()
 			break;
 		}
 		switch (lns[LN_Y]->str[i]) {
-		case ' ':
-		case '\t':
-		case '-':
-		case '_':
+		CASE_SEPARATOR:
 			/*
 			 * Implement navigating to the word boundaries.
 			 */
