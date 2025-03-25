@@ -1090,25 +1090,32 @@ scrl_up(size_t scrl_ln)
 void
 scrl_end()
 {
-	/* If cursor is currently not on the last text character. */
-	if (LN_Y != lns_l-1 || LN_X != lns[lns_l-1]->l) {
-		ln_y = ws_row-1;
-		ln_x = lns[lns_l-1]->l;
-		curs_y = ws_row;
-		curs_x = char2col(lns_l-1, lns[lns_l-1]->l);
-	}
+	US last_row;
 	
-	/* If we need to do actual scroll. */
-	if (off_y != lns_l - ws_row) {
+	curs_x = char2col(lns_l-1, lns[lns_l-1]->l);
+	ln_x = lns[lns_l-1]->l;
+	last_row = lns_l - off_y;
+	
+	/* If need to scroll the screen. */
+	if (last_row > ws_row) {
 		off_y = lns_l - ws_row;
+		ln_y = ws_row - 1;
+		curs_y = ws_row;
 		dpl_pg();
 	}
 	/*
-	 * Sync cursor even if it is not necessary, to keep
-	 * things simple.
+	 * This is the case where the last _text_ line is
+	 * seen on the screen, but it is not the last _screen_
+	 * line.  It happens when text itself has a few lines
+	 * in general, or if we've scrolled out of the screen.
+	 * In this case we do not do scroll, just move the
+	 * cursor to the end.
 	 */
-	else
+	else {
+		ln_y = last_row-1;
+		curs_y = last_row;
 		SYNC_CURS();
+	}
 	
 	need_print_pos = 1;
 }
