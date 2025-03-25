@@ -989,7 +989,7 @@ scrl_dwn(size_t scrl_ln)
 	 * If we're already on the last screen - we have nothing
 	 * to scroll.
 	 */
-	if (off_y+ws_row == lns_l)
+	if (off_y+ws_row >= lns_l)
 		return;
 	
 	/*
