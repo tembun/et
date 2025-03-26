@@ -507,11 +507,11 @@ read_fd(int fd)
 				continue;
 			}
 			
-			if (lns[lns_l]->l == lns[lns_l]->sz)
-				EXPAND_LN(lns_l);
+			if (lns[lns_l-1]->l == lns[lns_l-1]->sz)
+				EXPAND_LN(lns_l-1);
 			
-			lns[lns_l]->str[lns[lns_l]->l] = buf[i];
-			lns[lns_l]->l++;
+			lns[lns_l-1]->str[lns[lns_l-1]->l] = buf[i];
+			lns[lns_l-1]->l++;
 		}
 	}
 	
@@ -1846,7 +1846,7 @@ int
 main(int argc, char** argv)
 {
 	lns = NULL;
-	lns_l = 0;
+	lns_l = 1;
 	lns_sz = 0;
 	mod = MOD_NAV;
 	off_x = 0;
