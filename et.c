@@ -10,6 +10,7 @@
 
 #include <fcntl.h>
 #include <libgen.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -517,11 +518,11 @@ read_fd(int fd)
 				continue;
 			}
 			
-			if (lns[lns_l-1]->l == lns[lns_l-1]->sz)
-				EXPAND_LN(lns_l-1);
+			if (lns[lns_l]->l == lns[lns_l]->sz)
+				EXPAND_LN(lns_l);
 			
-			lns[lns_l-1]->str[lns[lns_l-1]->l] = buf[i];
-			lns[lns_l-1]->l++;
+			lns[lns_l]->str[lns[lns_l]->l] = buf[i];
+			lns[lns_l]->l++;
 		}
 	}
 	
@@ -703,7 +704,7 @@ dpl_pg(US from)
 	
 	for (i = off; i < end; ++i) {
 		print_ln(i, 0, lns[i]->l);
-		dprintf(STDOUT_FILENO, "\n\r");
+		write(STDOUT_FILENO, "\n\r", 2);
 	}
 	
 	/*
@@ -1476,6 +1477,13 @@ dpl_cmd_txt(char* msg)
 	
 	CLN_CMD();
 	WR_REV_VID("%s", msg);
+	
+	/*
+	 * For cursor not to hang about in the end.
+	 * It makes an illusion of trailing whitespace.
+	 */
+	curs_x = 0;
+	SYNC_CURS();
 }
 
 /*
@@ -1577,6 +1585,53 @@ read_cmd()
 	 * it means that input is invalid.
 	 */
 	return 1;
+}
+
+/*
+ * ``cmd'' `f' without arguments prints the current filepath,
+ * to which the buffer will be saved in case of writing (`w') it.
+ * If it's invoked with argument like: `f <path>', then it sets
+ * current filepath to `path'.
+ * --
+ * Return format the same as for `do_cmd'.
+ */
+int
+do_filepath()
+{
+	char* cmdp;
+	
+	cmdp = &cmd[1];
+	
+	switch (*cmdp) {
+	case '\n':
+		if (filepath == NULL)
+			dpl_cmd_txt("<Anonymous>");
+		else
+			dpl_cmd_txt(filepath);
+		return 1;
+	case ' ': {
+		char* path;
+		int i;
+		
+		cmdp++;
+		path = smalloc(PATH_MAX+1);
+		
+		for (i = 0; i < PATH_MAX; ++i) {
+			if (*(cmdp+i) == '\n')
+				break;
+			path[i] = *(cmdp+i);
+		}
+		if (i == 0)
+			return -1;
+		path[i+1] = '\0';
+		
+		SET_FILEPATH(path);
+		free(path);
+		return 0;
+	}
+	default:
+		return -1;
+	}
 }
 
 /*
@@ -1696,6 +1751,118 @@ do_jmp_ln()
 }
 
 /*
+ * Quit the editor.
+ */
+void
+quit()
+{
+	CLN_CMD();
+	terminate();
+}
+
+/*
+ * Write buffer contents to the file.
+ * --
+ * Return format obeys to `do_cmd'.
+ */
+int
+do_write_file()
+{
+	char* cmdp = &cmd[1];
+	/* Do we need to quit editor after write. */
+	char q;
+	/* A filepath the buffer will be written to. */
+	char* path;
+	/* Did we allocate memory for pathname. */
+	char alc_path;
+	/* A file descriptor for a target file. */
+	int fd;
+	/* General purpose iterator. */
+	size_t i;
+	/* Buffer that will be written to the file. */
+	char* wbuf;
+	/* Length of a `wbuf'. */
+	size_t wbufl;
+	/* Iterator of a `wbuf'. */
+	size_t wbufi;
+	
+	q = *cmdp == 'q';
+	
+	if (q)
+		cmdp++;
+	
+	switch (*cmdp) {
+	case '\n':
+		alc_path = 0;
+		
+		if (filepath == NULL) {
+			dpl_cmd_txt(
+"Which filepath?  Do either `w[q] <path>' or `f <path>'.");
+			return 1;
+		}
+		path = filepath;
+		break;
+	case ' ':		
+		alc_path = 1;
+		
+		cmdp++;
+		path = smalloc(PATH_MAX+1);
+		for (i = 0; i < PATH_MAX; ++i) {
+			if (*(cmdp+i) == '\n')
+				break;
+			path[i] = *(cmdp+i);
+		}
+		if (i == 0)
+			return -1;
+		path[i+1] = '\0';
+		break;
+	default:
+		return -1;
+	}
+	
+	if (check_exists(path))
+		fd = open(path, O_WRONLY | O_TRUNC);
+	else
+		fd = open(path, O_CREAT | O_RDWR);
+	if (fd < 0) {
+		dpl_cmd_txt("Can not open the file.");
+		return 1;
+	}
+	/*
+	 * Do not free the path if we've used `filepath' for it.
+	 */
+	if (alc_path)
+		free(path);
+	
+	wbufl = 0;
+	for (i = 0; i < lns_l; ++i) {
+		wbufl += lns[i]->l+1;
+	}
+	
+	wbuf = smalloc(wbufl);
+	wbufi = 0;
+	for (i = 0; i < lns_l; ++i) {
+		strncpy(wbuf+wbufi, lns[i]->str, lns[i]->l);
+		wbufi += lns[i]->l;
+		wbuf[wbufi++] = '\n';
+	}
+	
+	if (write(fd, wbuf, wbufl) < 0) {
+		free(wbuf);
+		dpl_cmd_txt("Error writing file.");
+		return 1;
+	}
+	free(wbuf);
+	
+	close(fd);
+	
+	if (q)
+		quit();
+	
+	return 0;
+}
+
+/*
  * Execute the command, read by `read_cmd' into `cmd' buffer.
  * Returns `0' if command is successfull and we need to immediately
  * quit the ``cmd'' prompt.
@@ -1716,16 +1883,16 @@ do_cmd()
 		case 'q':
 			if (*(cmd+1) != '\n')
 				return 1;
-			CLN_CMD();
-			terminate();
+			quit();
 			return 0;
 		case 'f':
-			dpl_cmd_txt(filepath);
-			return 1;
+			return do_filepath();
 		case 'j':
 			return do_jmp_ln();
 		case 'k':
 			return do_mark_ln();
+		case 'w':
+			return do_write_file();
 		default:
 			return -1;
 		}
@@ -1959,7 +2126,7 @@ int
 main(int argc, char** argv)
 {
 	lns = NULL;
-	lns_l = 1;
+	lns_l = 0;
 	lns_sz = 0;
 	mod = MOD_NAV;
 	off_x = 0;
