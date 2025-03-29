@@ -149,6 +149,9 @@ typedef unsigned short US;
 #define LN_X (off_x + ln_x)
 #define LN_Y (off_y + ln_y)
 
+/* Clamp value `A' to `M', if `A' greater than `M'. */
+#define CLAMP_MAX(A, M) ((A) > (M) ? (M) : (A))
+
 /*
  * Put a _printable_ character into screen and move cursor one
  * character right.
@@ -174,6 +177,15 @@ typedef unsigned short US;
 
 /* Is `C' a valid name for a line mark. */
 #define IS_MARK(C) ((C >= 'A' && C <= 'Z') || (C >= 'a' && C <= 'z'))
+
+/* Free structure and string for line at index `I'. */
+#define FREE_LN(I) do {		\
+	free(lns[(I)]->str);	\
+	free(lns[(I)]);		\
+} while (0)
+
+/* `dpl_pg' with offset of 0. */
+#define DPL_PG() dpl_pg(0)
 
 
 /* Main text line structure. */
@@ -338,10 +350,8 @@ free_lns()
 {
 	size_t i;
 	
-	for (i = 0; i < lns_l; ++i) {
-		free(lns[i]->str);
-		free(lns[i]);
-	}
+	for (i = 0; i < lns_l; ++i)
+		FREE_LN(i);
 	
 	free(lns);
 }
@@ -659,36 +669,39 @@ print_ln(size_t idx, size_t start, size_t end)
 
 /*
  * Display the text so that it fits in one screen.
- * The print starts from the current vertical line offset `off_y'.
+ * The print starts from the current vertical line offset `from'.
  */
 void
-dpl_pg()
+dpl_pg(US from)
 {
 	size_t i;
 	size_t end;
 	/* Number of printable lines. */
 	size_t ln_num;
 	/* Number of trailing empty lines. */
-	size_t empt_num;
+	US empt_num;
+	size_t off;
 	
-	ln_num = lns_l - off_y;
+	off = off_y + from;
+	ln_num = lns_l - off;
 	
-	MV_CURS_SF(BUF_ROW, 1);
+	if (from == 0) {
+		MV_CURS_SF(BUF_ROW, 1);
+	}
+	
 	ERS_FWD();
-	
-	/*
-	 * If lines can not fit the screen.
-	 */
-	if (ln_num > ws_row) {
+
+	/* If lines can not fit the screen. */
+	if (ln_num > ws_row-from-1) {
 		end = off_y + ws_row;
 		empt_num = 0;
 	}
 	else {
 		end = lns_l;
-		empt_num = ws_row - ln_num;
+		empt_num = ws_row - ln_num - from;
 	}
 	
-	for (i = off_y; i < end; ++i) {
+	for (i = off; i < end; ++i) {
 		print_ln(i, 0, lns[i]->l);
 		dprintf(STDOUT_FILENO, "\n\r");
 	}
@@ -699,7 +712,8 @@ dpl_pg()
 	for (i = 0; i < empt_num; ++i)
 		dprintf(STDOUT_FILENO, "~\n\r");
 	
-	RST_CURS();
+	if (from == 0)
+		RST_CURS();
 	
 	if (mod != MOD_CMD)
 		print_status();
@@ -843,7 +857,7 @@ nav_right()
 		
 		if (scrl) {
 			off_y++;
-			dpl_pg();
+			DPL_PG();
 		}
 		else {
 			ln_y++;
@@ -890,7 +904,7 @@ nav_left()
 		
 		if (scrl) {
 			off_y--;
-			dpl_pg();
+			DPL_PG();
 		}
 		else {
 			ln_y--;
@@ -934,7 +948,7 @@ nav_dwn()
 	curs_x = nw_curs_x;
 		
 	if (scrl)
-		dpl_pg();	
+		DPL_PG();	
 	SYNC_CURS();
 	
 	need_print_pos = 1;
@@ -966,9 +980,8 @@ nav_up()
 	ln_x = col2char(LN_Y, curs_x, &nw_curs_x);
 	curs_x = nw_curs_x;
 	
-	if (scrl) {
-		dpl_pg();
-	}
+	if (scrl)
+		DPL_PG();
 	SYNC_CURS();
 	
 	need_print_pos = 1;
@@ -1023,7 +1036,7 @@ scrl_dwn(size_t scrl_ln)
 	}
 	
 	off_y += scrl_n;	
-	dpl_pg();
+	DPL_PG();
 	SYNC_CURS();
 	
 	need_print_pos = 1;
@@ -1076,7 +1089,7 @@ scrl_up(size_t scrl_ln)
 	}
 	
 	off_y -= scrl_n;
-	dpl_pg();
+	DPL_PG();
 	SYNC_CURS();
 	
 	need_print_pos = 1;
@@ -1101,7 +1114,7 @@ scrl_end()
 		off_y = lns_l - ws_row;
 		ln_y = ws_row - 1;
 		curs_y = ws_row;
-		dpl_pg();
+		DPL_PG();
 	}
 	/*
 	 * This is the case where the last _text_ line is
@@ -1139,7 +1152,7 @@ scrl_start()
 	/* If we need to do actual scroll and redraw page. */
 	if (off_y != 0) {
 		off_y = 0;
-		dpl_pg();
+		DPL_PG();
 	}
 	/*
 	 * Synchronize cursor even in case it's not needed (if
@@ -1299,6 +1312,100 @@ out:
 	curs_x = nav_col;
 	SYNC_CURS();
 	
+	need_print_pos = 1;
+}
+
+/*
+ * Delete everything in this line that is after current cursor position.
+ */
+void
+del_ln_fwd()
+{
+	/* If we're on the last _text_ line. */
+	char last;
+	
+	/*
+	 * If the cursor is in the middle of line, then
+	 * we erase the rest part of this line.  Cursor
+	 * stays at the same position.
+	 */
+	if (lns[LN_Y]->l != 0 || lns_l == 1) {
+		lns[LN_Y]->l = LN_X;
+		ERS_LINE_FWD();
+		return;
+	}
+	
+	/*
+	 * If we've reached this, it means we're in the
+	 * begining of line and the line itself is empty.
+	 * In this case, we delete this whole line (i.e.
+	 * remove it from `lns') and move all lines that
+	 * were _below_ this line up.  The cursor stays
+	 * at same place.  But there are two edge cases:
+	 *     1) We've deleted the last _text_ line.  In
+	 *        this case we move cursor up so that it
+	 *        points to the _current_ last line.  In
+	 *        case it was the last _visible_ line we
+	 *        also move the _screen_ one line up.
+	 *     2) We've deleted the topmost _visible_ line.
+	 *        In this case, we move one _screen_ up and
+	 *        put the cursor on the last line possible.
+	 */
+	
+	last = LN_Y == lns_l - 1;
+	
+	FREE_LN(LN_Y);
+	
+	/* Move all lines that are after the deleted one up. */
+	memcpy(&lns[LN_Y], &lns[LN_Y+1],
+		(lns_l-LN_Y-1) * (sizeof(struct ln*)));
+	
+	lns_l--;
+	
+	if (last) {
+		/* Case #1 (subcase 2). */
+		if (ln_y == ws_row - 1 && off_y != 0) {
+			/*
+			 * Move screen one line up to not render empty
+			 * line markers.
+			 */
+			off_y--;
+			DPL_PG();
+		}
+		/* Case #2. */
+		else if (ln_y == 0) {
+			/* If previous screen _will_ fit the screen. */
+			if (off_y > ws_row)
+				off_y -= ws_row;
+			else
+				off_y = 0;
+			
+			/* Put cursor on the last possible line. */
+			ln_y = CLAMP_MAX(lns_l-off_y, ws_row-1);
+			curs_y = ln_y+1;
+			
+			DPL_PG();
+			SYNC_CURS();
+		}
+		/* Case #1 (subcase 1). */
+		else {
+			ERS_LINE_FWD();
+			/*
+			 * A trick to not `dpl_pg'.  In fact, what
+			 * we really need is to move cursor one line
+			 * up and put an empty line marker below.
+			 */
+			dprintf(STDIN_FILENO, "~");
+			
+			/* Move cursor one line up. */
+			ln_y--;
+			curs_y--;
+			SYNC_CURS();
+		}
+	}
+	/* Redraw all the lines below (not entire page). */
+	else
+		dpl_pg(ln_y);
 	need_print_pos = 1;
 }
 
@@ -1555,7 +1662,7 @@ jmp_ln(size_t ln_num)
 	 */
 	nav_curs_x = 1;
 	
-	dpl_pg();
+	DPL_PG();
 }
 
 /*
@@ -1746,6 +1853,12 @@ handle_char(char c)
 			break;
 		}
 		break;
+	case CTRL('e'):
+		if (mod == MOD_NAV) {
+			del_ln_fwd();
+			break;
+		}
+		break;
 	}
 }
 
@@ -1803,7 +1916,7 @@ handle_sigwinch()
 		ln_y = ws_row-1;
 		curs_y = ws_row;
 	}
-	dpl_pg();
+	DPL_PG();
 	if (mod == MOD_CMD)
 		print_cmd();
 }
@@ -1867,7 +1980,7 @@ main(int argc, char** argv)
 	setup_terminal();
 	init_win_sz();
 	
-	dpl_pg();
+	DPL_PG();
 	/* Move cursor to the first visible character. */
 	MV_CURS(BUF_ROW, 1);
 	input_loop();
