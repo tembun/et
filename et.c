@@ -285,6 +285,9 @@ US ln_y;
 size_t off_x;
 size_t off_y;
 
+/* Is buffer dirty. */
+char dirty;
+
 /*
  * Set this flag up when an action that changes the cursor
  * position has been done.
@@ -1421,6 +1424,8 @@ del_ln_fwd()
 	/* Redraw all the lines below (not entire page). */
 	else
 		dpl_pg(ln_y);
+	
+	dirty = 1;
 	need_print_pos = 1;
 }
 
@@ -1867,8 +1872,9 @@ do_write_file()
 		return 1;
 	}
 	free(wbuf);
-	
 	close(fd);
+	
+	dirty = 0;
 	
 	if (q)
 		quit();
@@ -1895,8 +1901,13 @@ do_cmd()
 		 * Quit the editor.
 		 */
 		case 'q':
+		case 'Q':
 			if (*(cmd+1) != '\n')
 				return 1;
+			if (*cmd == 'q' && dirty == 1) {
+				dpl_cmd_txt("Can't - the buffer is dirty.");
+				return 1;
+			}
 			quit();
 			return 0;
 		case 'f':
