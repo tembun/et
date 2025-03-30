@@ -711,6 +711,17 @@ dpl_pg(US from)
 	}
 	
 	/*
+	 * In case of empty buffer we don't want to print
+	 * the empty line marker right on the line the
+	 * cursor currently at.
+	 */
+	if (lns_l == 0) {
+		empt_num--;
+		curs_y++;
+		SYNC_CURS();
+	}
+	
+	/*
 	 * Print empty lines, if any.
 	 */
 	for (i = 0; i < empt_num; ++i)
