@@ -29,6 +29,9 @@ typedef unsigned short US;
 #define LNS_EXPAND 64
 /* By how many lines the line's string is extended when it needs space. */
 #define LN_EXPAND 64
+/* Which symbol indicates an empty lines. */
+#define EMPT_LN_MARK "~"
+
 
 /* The actual text starts to be printed at this screen row. */
 #define BUF_ROW 1
@@ -711,7 +714,7 @@ dpl_pg(US from)
 	 * Print empty lines, if any.
 	 */
 	for (i = 0; i < empt_num; ++i)
-		dprintf(STDOUT_FILENO, "~\n\r");
+		dprintf(STDOUT_FILENO, "%s\n\r", EMPT_LN_MARK);
 	
 	if (from == 0)
 		RST_CURS();
@@ -1396,7 +1399,7 @@ del_ln_fwd()
 			 * we really need is to move cursor one line
 			 * up and put an empty line marker below.
 			 */
-			dprintf(STDIN_FILENO, "~");
+			dprintf(STDIN_FILENO, EMPT_LN_MARK);
 			
 			/* Move cursor one line up. */
 			ln_y--;
