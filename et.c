@@ -2161,6 +2161,9 @@ main(int argc, char** argv)
 	filepath = NULL;
 	need_print_pos = 0;
 	
+	if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO))
+		die("Both input and output should go to the terminal.\n");
+	
 	expand_lns(0);
 	
 	if (argc > 2)
