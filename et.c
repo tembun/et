@@ -564,6 +564,7 @@ handle_filepath(char* path)
 		read_fd(fd);
 	}
 	else {
+		lns_l = 1;
 		mod = MOD_EDT;
 		return;
 	}
