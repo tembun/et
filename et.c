@@ -2424,6 +2424,8 @@ main(int argc, char** argv)
 		die("I can edit only one thing at a time.\n");
 	if (argc > 1)
 		handle_filepath(argv[1]);
+	else
+		lns_l = 1;
 	
 	set_raw();
 	setup_terminal();
