@@ -88,10 +88,19 @@ typedef unsigned short US;
 /* Erase line forward. */
 #define ERS_LINE_FWD_CMD "\x1b[K"
 
-/* Expand the string for line at `lns[I]'. */
-#define EXPAND_LN(I) do {						\
-	lns[I]->str = srealloc(lns[I]->str, lns[I]->sz += LN_EXPAND);	\
+/* Expand the string for line at `lns[I]' `B' bytes. */
+#define EXPAND_LN(I, B) do {						\
+	lns[I]->str = srealloc(lns[I]->str, lns[I]->sz += B);		\
 } while(0)
+
+/* Initialize object for line at index `I'. */
+#define INIT_LN(I) do {				\
+	lns[I] = scalloc(1, sizeof(struct ln));	\
+	lns[I]->l = 0;				\
+	lns[I]->sz = 0;				\
+	lns[I]->str = NULL;			\
+	EXPAND_LN(I, LN_EXPAND);		\
+} while (0)
 
 /*
  * Write argument (as arguments for `dprintf') in reverse video mode
@@ -181,6 +190,8 @@ typedef unsigned short US;
 
 /* Is `C' a valid name for a line mark. */
 #define IS_MARK(C) ((C >= 'A' && C <= 'Z') || (C >= 'a' && C <= 'z'))
+/* Is `C' a printable character. */
+#define IS_PRINTABLE(C) ((C) >= ' ' && (C) <= '~')
 
 /* Free structure and string for line at index `I'. */
 #define FREE_LN(I) do {		\
@@ -444,18 +455,13 @@ set_raw()
 	tos.c_oflag &= ~OPOST;
 	
 	/*
-	 * `VMIN' is a minimum number of characters read(2) will read before
-	 * it will be able to return.  Set it to `1' to be able to read
-	 * input byte-by-byte.
+	 * read(2) satisfies when either 1 byte has been read or
+	 * 100 ms have passed.  It will be very helpful for
+	 * handling (in our case, detecting and ignoring) ESCape
+	 * sequences (see `input_loop').
 	 */
 	tos.c_cc[VMIN] = 1;
-	
-	/*
-	 * `VTIME' is how much time should pass before read(2) will be able
-	 * to return.  Set it to `0' for it to play no role in input read
-	 * and for `VMIN' be significant.
-	 */
-	tos.c_cc[VTIME] = 0;
+	tos.c_cc[VTIME] = 1;
 	
 	/* Apply all changes we have just done. */
 	if (tcsetattr(STDOUT_FILENO, TCSANOW, &tos) == -1)
@@ -463,7 +469,7 @@ set_raw()
 }
 
 /*
- * Expand `lns' at index `off'.
+ * Expand `lns' at the end.
  * Allocate space for:
  *     - `ln' pointer.
  *     - `ln' struct.
@@ -471,7 +477,7 @@ set_raw()
  * 
  */
 void
-expand_lns(size_t off)
+expand_lns()
 {
 	size_t i;
 	
@@ -480,13 +486,8 @@ expand_lns(size_t off)
 	/*
 	 * Initialize objects for new lines.
 	 */
-	for (i = 0; i < LNS_EXPAND; ++i) {
-		lns[i+off] = scalloc(1, sizeof(struct ln));
-		lns[i+off]->l = 0;
-		lns[i+off]->sz = 0;
-		lns[i+off]->str = NULL;
-		EXPAND_LN(i+off);
-	}
+	for (i = 0; i < LNS_EXPAND; ++i)
+		INIT_LN(i+lns_l);
 }
 
 /*
@@ -520,12 +521,12 @@ read_fd(int fd)
 			if (buf[i] == '\n') {
 				lns_l++;
 				if (lns_l == lns_sz)
-					expand_lns(lns_l);
+					expand_lns();
 				continue;
 			}
 			
 			if (lns[lns_l]->l == lns[lns_l]->sz)
-				EXPAND_LN(lns_l);
+				EXPAND_LN(lns_l, LN_EXPAND);
 			
 			lns[lns_l]->str[lns[lns_l]->l] = buf[i];
 			lns[lns_l]->l++;
@@ -692,9 +693,7 @@ dpl_pg(US from)
 	off = off_y + from;
 	ln_num = lns_l - off;
 	
-	if (from == 0) {
-		MV_CURS_SF(BUF_ROW, 1);
-	}
+	MV_CURS_SF(from+1, 1);
 	
 	ERS_FWD();
 
@@ -730,8 +729,7 @@ dpl_pg(US from)
 	for (i = 0; i < empt_num; ++i)
 		dprintf(STDOUT_FILENO, "%s\n\r", EMPT_LN_MARK);
 	
-	if (from == 0)
-		RST_CURS();
+	RST_CURS();
 	
 	if (mod != MOD_CMD)
 		print_status();
@@ -847,6 +845,9 @@ nav_right()
 	 */
 	US step;
 	
+	if (lns_l == 0)
+		return;
+	
 	/* If it's not the last line character, just move right. */
 	if (LN_X != lns[LN_Y]->l) {
 		if (lns[LN_Y]->str[LN_X] != '\t')
@@ -951,7 +952,7 @@ nav_dwn()
 	US nw_curs_x;
 	
 	/* If last line of a _text_. */
-	if (LN_Y == lns_l-1)
+	if (lns_l == 0 || LN_Y == lns_l-1)
 		return;
 	
 	scrl = ln_y == ws_row-1;
@@ -1376,9 +1377,10 @@ del_ln_fwd()
 	
 	/* Move all lines that are after the deleted one up. */
 	memcpy(&lns[LN_Y], &lns[LN_Y+1],
-		(lns_l-LN_Y-1) * (sizeof(struct ln*)));
+		(lns_sz-LN_Y-1) * (sizeof(struct ln*)));
 	
 	lns_l--;
+	lns_sz--;
 	
 	if (last) {
 		/* Case #1 (subcase 2). */
@@ -1413,7 +1415,7 @@ del_ln_fwd()
 			 * we really need is to move cursor one line
 			 * up and put an empty line marker below.
 			 */
-			dprintf(STDIN_FILENO, EMPT_LN_MARK);
+			dprintf(STDOUT_FILENO, EMPT_LN_MARK);
 			
 			/* Move cursor one line up. */
 			ln_y--;
@@ -1584,7 +1586,7 @@ read_cmd()
 				return first;
 			default:
 				/* Handle only printable characters. */
-				if (*buf >= ' ' && *buf <= '~') {
+				if (IS_PRINTABLE(*buf)) {
 					/*
 					 * Update `first' flag only here,
 					 * because we _don't_ count any
@@ -1928,14 +1930,247 @@ do_cmd()
 }
 
 /*
+ * Insert one _printable_ character (and tab) under current
+ * cursor position.
+ */
+void
+ins_char(char c)
+{
+	/* Check if we have enough space for this character. */
+	if (lns[LN_Y]->l + 1 > lns[LN_Y]->sz)
+		EXPAND_LN(LN_Y, LN_EXPAND);
+	
+	/*
+	 * Shift stirng characters one character to the right,
+	 * then insert the character in the empty space and
+	 * redraw the rest of the line.
+	 */
+	memmove(lns[LN_Y]->str+LN_X+1, lns[LN_Y]->str+LN_X,
+	    lns[LN_Y]->sz-LN_X);
+	ERS_LINE_FWD();
+	lns[LN_Y]->str[LN_X] = c;
+	lns[LN_Y]->l++;
+	/*
+	 * In combination with `ERS_LINE_FWD' above it reprints
+	 * the rest part of this line only.
+	 */
+	write(STDOUT_FILENO, lns[LN_Y]->str+LN_X, lns[LN_Y]->l-LN_X);
+	/*
+	 * We could just inserted tabulation character, that's why
+	 * we need to perform a complete navigation routine to keep
+	 * cursor in sync with buffer.
+	 */
+	nav_right();
+	SYNC_CURS();
+	
+	dirty = 1;
+	need_print_pos = 1;
+}
+
+/*
+ * Insert a line break at current cursor position.
+ */
+void
+ins_ln_brk()
+{
+	/* Pointer to last unused line, that has been allocated. */
+	struct ln* last_unus;
+	
+	if (lns_l + 1 > lns_sz)
+		expand_lns();
+	
+	/*
+	 * As far as we already have some extra dummy line
+	 * structures, let's not waste and lose them, but
+	 * use them in the actual text.  But due to their
+	 * layout (linear, array-like), we need to first
+	 * remember the last line of these: we're going to
+	 * shift all the below-lying lines down and insert
+	 * this dummy line after current line; in essense,
+	 * it breaks down to the task similar to swapping
+	 * two variables, which involves a third temporary
+	 * variable, which is, in our case, `last_unus'.
+	 */
+	last_unus = lns[lns_sz-1];
+	/* Shift all the lines below one position down. */
+	memmove(lns+LN_Y+2, lns+LN_Y+1,
+	    (lns_sz-LN_Y) * sizeof(struct ln*));
+	
+	/*
+	 * Insert early-pre-initialized line structure
+	 * after current line.
+	 */
+	lns[LN_Y+1] = last_unus;
+	lns_l++;
+	
+	/*
+	 * The hunk of a line, that used to be after cursor,
+	 * we now transfer to the just-inserted line structure.
+	 */
+	lns[LN_Y+1]->sz = lns[LN_Y+1]->l = lns[LN_Y]->l - LN_X;
+	memcpy(lns[LN_Y+1]->str, lns[LN_Y]->str+LN_X,
+	    lns[LN_Y]->sz-LN_X);
+	
+	/* Trim the current line to its present length. */
+	lns[LN_Y]->l = LN_X;
+	
+	/*
+	 * Visually clean up the rest of the current line
+	 * and move the cursor to the newly inserted line.
+	 */
+	ERS_FWD();
+	curs_x = 1;
+	curs_y++;
+	ln_x = 0;
+	ln_y++;
+	SYNC_CURS();
+	dpl_pg(ln_y);
+	
+	dirty = 1;
+	need_print_pos = 1;
+}
+
+/*
+ * Delete one character backward at current cursor position.
+ */
+void
+del_char_back()
+{
+	/*
+	 * If we're about to delete first character in the line,
+	 * then, if there is a line above, we want to append
+	 * current line to the end of it and move all the lines
+	 * below up.
+	 */
+	if (LN_X == 0) {
+		/*
+		 * Length of current line.
+		 * --
+		 * We need it as separate variable, because due
+		 * to the order of actions, we need to free this
+		 * line first, and then use its length.
+		 */
+		size_t pr_len;
+		
+		if (LN_Y == 0)
+			return;
+		if (ln_y == 0)
+			scrl_up(1);
+		
+		/* Check, if line above has a room for current line. */
+		if (lns[LN_Y-1]->l + lns[LN_Y]->l > lns[LN_Y-1]->sz)
+			EXPAND_LN(LN_Y-1, lns[LN_Y-1]->l + lns[LN_Y]->l -
+			    lns[LN_Y-1]->sz);
+		/*
+		 * Append current line to the end of line above (in the
+		 * data structure).
+		 */
+		memcpy(lns[LN_Y-1]->str+lns[LN_Y-1]->l, lns[LN_Y]->str,
+		    lns[LN_Y]->l);
+		
+		pr_len = lns[LN_Y]->l;
+		FREE_LN(LN_Y);
+		/* Move all the lines that were below current line, up. */
+		memcpy(lns+LN_Y, lns+LN_Y+1,
+		    (lns_sz-LN_Y) * sizeof(struct ln*));
+		
+		/*
+		 * Due to the way the `dpl_pg' works (will call it in
+		 * the end of this branch), it will not do anything if
+		 * we pass the last text line index into it.  Hence,
+		 * in case we've just taken action on the last line,
+		 * we manually patch the visual buffer, to update only
+		 * the parts we need.  We need to put an empty line
+		 * marker on current line, because it was the last one.
+		 */
+		if (LN_Y == lns_l - 1) {
+			ERS_LINE_FWD();
+			dprintf(STDOUT_FILENO, EMPT_LN_MARK);
+		}
+		
+		/*
+		 * Move cursor the the end of previous line (that end
+		 * that was _before_ appending the current line).
+		 */
+		lns_l--;
+		lns_sz--;
+		curs_y--;
+		curs_x = char2col(LN_Y-1, lns[LN_Y-1]->l);
+		ln_y--;
+		ln_x = lns[LN_Y]->l;
+		SYNC_CURS();
+		
+		/*
+		 * Visually append current line to the end of
+		 * the previous one.
+		 */
+		write(STDOUT_FILENO, lns[LN_Y]->str+lns[LN_Y]->l, pr_len);
+		/*
+		 * So far we've being referring to previous line initial
+		 * length, but from now on, we are not going to do this
+		 * anymore and we can alter it.
+		 */
+		lns[LN_Y]->l += pr_len;
+		
+		/*
+		 * `dpl_pg' makes sense only in case of a not-last line
+		 * (see few comments above).
+		 */
+		if (LN_Y != lns_l-1)
+			dpl_pg(ln_y+1);
+		
+		dirty = 1;
+		need_print_pos = 1;
+		
+		return;
+	}
+	
+	/*
+	 * Plain deleting one character back.
+	 * Since we still need to handle tab stops, we employ
+	 * the `nav_left', which already includes this logic.
+	 */
+	
+	nav_left();
+	
+	/*
+	 * Shift the entire string one character left.
+	 * Bear in mind, that due to the prior call of `nav_left',
+	 * we now assume that ``current'' `LN_X' is that one that was
+	 * before the original one.
+	 */
+	memcpy(lns[LN_Y]->str+LN_X, lns[LN_Y]->str+LN_X+1,
+	    lns[LN_Y]->sz-LN_X);
+	lns[LN_Y]->l--;
+	lns[LN_Y]->sz--;
+	
+	/*
+	 * Redraw everything in this line after the cursor.
+	 */
+	ERS_LINE_FWD();
+	write(STDOUT_FILENO, lns[LN_Y]->str+LN_X, lns[LN_Y]->l-LN_X);
+}
+
+/*
  * Routine for handling character that user's just entered.
  */
 void
 handle_char(char c)
 {
+	if (mod == MOD_EDT && c != CTRL('j') && c != BSP && c != DEL)
+		goto put_char;
+	
 	switch (c) {
+	case CTRL('j'):
+		if (mod == MOD_NAV) {
+			set_mod(MOD_EDT);
+			break;
+		}
+		else if (mod == MOD_EDT) {
+			set_mod(MOD_NAV);
+			break;
+		}
 	case '\r':
-	case '\n':
 	case ESC:
 	case DEL:
 	case BSP:
@@ -1950,7 +2185,9 @@ handle_char(char c)
 		 * and it is done by means of falling through
 		 * to the ":" label.
 		 */
-		if (mod != MOD_CMD)
+		if (mod == MOD_EDT)
+			goto put_char;
+		if (mod == MOD_NAV)
 			break;
 		/* FALLTHROUGH. */
 	case ':':
@@ -1974,83 +2211,68 @@ handle_char(char c)
 		}
 		break;
 	case ';':
-		if (mod == MOD_NAV) {
+		if (mod == MOD_NAV)
 			nav_right();
-			break;
-		}
 		break;
 	case 'j':
-		if (mod == MOD_NAV) {
+		if (mod == MOD_NAV)
 			nav_left();
-			break;
-		}
 		break;
 	case 'l':
-		if (mod == MOD_NAV) {
+		if (mod == MOD_NAV)
 			nav_dwn();
-			break;
-		}
 		break;
 	case 'k':
-		if (mod == MOD_NAV) {
+		if (mod == MOD_NAV)
 			nav_up();
-			break;
-		}
 		break;
 	case CTRL('l'):
-		if (mod == MOD_NAV) {
+		if (mod == MOD_NAV)
 			scrl_dwn(SCRL_LN);
-			break;
-		}
 		break;
 	case CTRL('k'):
-		if (mod == MOD_NAV) {
+		if (mod == MOD_NAV)
 			scrl_up(SCRL_LN);
-			break;
-		}
 		break;
 	case '>':
-		if (mod == MOD_NAV) {
+		if (mod == MOD_NAV)
 			scrl_end();
-			break;
-		}
 		break;
 	case '<':
-		if (mod == MOD_NAV) {
+		if (mod == MOD_NAV)
 			scrl_start();
-			break;
-		}
 		break;
 	case CTRL('a'):
-		if (mod == MOD_NAV) {
+		if (mod == MOD_NAV)
 			nav_ln_start();
-			break;
-		}
 		break;
 	case CTRL('d'):
-		if (mod == MOD_NAV) {
+		if (mod == MOD_NAV)
 			nav_ln_end();
-			break;
-		}
 		break;
 	case 'd':
-		if (mod == MOD_NAV) {
+		if (mod == MOD_NAV)
 			nav_word_nx();
-			break;
-		}
 		break;
 	case 'a':
-		if (mod == MOD_NAV) {
+		if (mod == MOD_NAV)
 			nav_word_pr();
-			break;
-		}
 		break;
 	case CTRL('e'):
-		if (mod == MOD_NAV) {
+		if (mod == MOD_NAV)
 			del_ln_fwd();
-			break;
-		}
 		break;
+	default:
+		if (mod == MOD_EDT) {
+put_char:
+			if (IS_PRINTABLE(c) || c == '\t')
+				ins_char(c);
+			/* `Enter' key generates it. */
+			else if (c == '\r')
+				ins_ln_brk();
+			else if (c == BSP)
+				del_char_back();
+		}
 	}
 }
 
@@ -2061,11 +2283,43 @@ void
 input_loop()
 {
 	while (1) {
-		while (read(STDIN_FILENO, &buf, 1) > 0) {
+		while (read(STDIN_FILENO, &buf, 1) == 1) {
+			/*
+			 * If we have just read an `ESC' character it either
+			 * means that we've just literally hit `ESC' key or
+			 * we stroke a key that generates an escape sequence.
+			 * We want to completely throw the later out (i.e
+			 * ignore it).  We don't need them, 'cause this editor
+			 * doesn't make use of any of these.
+			 */
+			if (buf[0] == ESC) {
+				char dummy;
+				
+				/*
+				 * Make use of the `VTIME' flag that we've set
+				 * in `set_raw'.  It means, that read(2) will
+				 * return if nary characters have been read
+				 * within 100 ms.  I.e. it will not hang here.
+				 */
+				if (read(STDIN_FILENO, &dummy, 1) == 1 &&
+				    read(STDIN_FILENO, &dummy, 1) == 1)
+				    	continue;
+			}
+			
+			/*
+			 * In case it's an ordinary key or a _single_ `ESC',
+			 * we do handle that character.
+			 */
 			handle_char(*buf);
+			
+			/*
+			 * Different actions in `handle_char' can set
+			 * `need_print_pos' flag if they adjust the cursor
+			 * position.
+			 */
 			if (need_print_pos) {
 				print_pos();
-				need_print_pos= 0;
+				need_print_pos = 0;
 			}
 		}
 	}
@@ -2164,7 +2418,7 @@ main(int argc, char** argv)
 	if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO))
 		die("Both input and output should go to the terminal.\n");
 	
-	expand_lns(0);
+	expand_lns();
 	
 	if (argc > 2)
 		die("I can edit only one thing at a time.\n");
