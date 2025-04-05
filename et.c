@@ -557,13 +557,16 @@ handle_filepath(char* path)
 	 * initialized.
 	 */
 	if (check_exists(path)) {
+		mod = MOD_NAV;
 		fd = open(path, O_RDONLY);
 		if (fd == -1)
 			die("can not open file at %s.\n", path);
 		read_fd(fd);
 	}
-	else
+	else {
+		mod = MOD_EDT;
 		return;
+	}
 	
 	if (close(fd) == -1)
 		die("can not close the file.\n");
@@ -2444,10 +2447,11 @@ main(int argc, char** argv)
 	if (argc > 2)
 		die("I can edit only one thing at a time.\n");
 	
-	if (argc > 1) {
+	if (argc > 1)
+		/*
+		 * Inside we decide regarding initial editor mode.
+		 */
 		handle_filepath(argv[1]);
-		mod = MOD_NAV;
-	}
 	else {
 		lns_l = 1;
 		mod = MOD_EDT;
