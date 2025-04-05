@@ -1980,6 +1980,14 @@ ins_ln_brk()
 		expand_lns();
 	
 	/*
+	 * If we're inserting line break on the last _screen_ line,
+	 * but _not_ on the last _text_ line, we firstly scroll down
+	 * and then do the same routines we do for general case.
+	 */
+	if (ln_y == ws_row - 1 && LN_Y != lns_l)
+		scrl_dwn(1);
+	
+	/*
 	 * As far as we already have some extra dummy line
 	 * structures, let's not waste and lose them, but
 	 * use them in the actual text.  But due to their
@@ -2019,12 +2027,26 @@ ins_ln_brk()
 	 * and move the cursor to the newly inserted line.
 	 */
 	ERS_FWD();
-	curs_x = 1;
-	curs_y++;
 	ln_x = 0;
 	ln_y++;
-	SYNC_CURS();
-	dpl_pg(ln_y);
+	curs_x = 1;
+	/*
+	 * Important: we _do_ increment `curs_y' even in case we're
+	 * at the last _text_ line and at the last _screen_ line.
+	 * We do that because in this case we will `scrl_dwn' one line
+	 * and its implementation does decrease the `curs_y' to keep
+	 * cursor at the same _text_ line.  But this is an edge case:
+	 * we need to scroll down meanwhile staying at the same _visual_
+	 * line.  If we increment `curs_y' first, then it'll be decreased
+	 * in `scrl_dwn', then it will stay the same.
+	 */
+	curs_y++;
+	if (ln_y == ws_row && LN_Y == lns_l-1) {
+		SYNC_CURS();
+		scrl_dwn(1);
+	}
+	else
+		dpl_pg(ln_y);
 	
 	dirty = 1;
 	need_print_pos = 1;
