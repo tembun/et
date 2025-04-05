@@ -2415,9 +2415,9 @@ init_win_sz()
  * Run the visual editor.
  *
  * If no arguments are provided, then an empty anonymous buffer
- * is created and opened.  You will be prompted to specify a
- * name to write the buffer out to when you make an attempt for
- * ``write'' command.
+ * is created and opened in the ``edt'' mode.  You will be
+ * prompted to specify a name to write the buffer out to when
+ * you make an attempt for ``write'' command.
  *
  * First and the only one available argument is a file path. If
  * there's no filt at this path, then then file will be created
@@ -2429,7 +2429,6 @@ main(int argc, char** argv)
 	lns = NULL;
 	lns_l = 0;
 	lns_sz = 0;
-	mod = MOD_NAV;
 	off_x = 0;
 	off_y = 0;
 	ln_x = 0;
@@ -2444,10 +2443,15 @@ main(int argc, char** argv)
 	
 	if (argc > 2)
 		die("I can edit only one thing at a time.\n");
-	if (argc > 1)
+	
+	if (argc > 1) {
 		handle_filepath(argv[1]);
-	else
+		mod = MOD_NAV;
+	}
+	else {
 		lns_l = 1;
+		mod = MOD_EDT;
+	}
 	
 	set_raw();
 	setup_terminal();
