@@ -1,7 +1,7 @@
 /*
  * et -- edit text.
  *
- * The visual text editor.
+ * The screen text editor.
  */
 
 
