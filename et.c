@@ -62,11 +62,11 @@ typedef unsigned short US;
 /* `Backspace'. */
 #define BSP 127
 
-/* ``cmd'' mode - when user inputs commands into the prompt. */
+/* ``CMD'' mode - when user inputs commands into the prompt. */
 #define MOD_CMD 0
-/* ``nav'' mode - when we move the cursor, i.e. navigate. */
+/* ``NAV'' mode - when we move the cursor, i.e. navigate. */
 #define MOD_NAV 1
-/* ``edt'' mode - when we edit the text, i.e. insert/delete it. */
+/* ``EDT'' mode - when we edit the text, i.e. insert/delete it. */
 #define MOD_EDT 2
 
 /*
@@ -174,10 +174,10 @@ typedef unsigned short US;
 	MV_CURS_R(1);			\
 } while (0)
 
-/* Move cursor to the ``cmd'' prompt. */
+/* Move cursor to the ``CMD'' prompt. */
 #define MV_CMD() MV_CURS(ws_row + 2, 1)
 
-/* Clean ``cmd'' line. */
+/* Clean ``CMD'' line. */
 #define CLN_CMD() do {	\
 	MV_CMD();	\
 	ERS_LINE_ALL();	\
@@ -243,10 +243,11 @@ struct termios tos;
 
 /*
  * The current mode of the program.  There are three of them:
- *     ``cmd'' - command-prompt; see `MOD_CMD'.
- *     ``nav'' - navigate; see `MOD_NAV'.
- *     ``edt'' - edit; see `MOD_ED'.
- * We start in the ``nav'' one.
+ *     ``CMD'' - command-prompt; see `MOD_CMD'.
+ *     ``NAV'' - navigate; see `MOD_NAV'.
+ *     ``EDT'' - edit; see `MOD_ED'.
+ * We start in the ``NAV'' one by default, but it may be altered
+ * via `-e' option (see `main').
  */
 char mod;
 
@@ -265,7 +266,7 @@ US prev_curs_y;
 
 /*
  * The terminal cursor position used to be _before_ we escaped to
- * the ``cmd'' prompt (see `esc_cmd').  We keep it to restore it
+ * the ``CMD'' prompt (see `esc_cmd').  We keep it to restore it
  * later, when we quit the prompt.
  */
 US nav_curs_x;
@@ -625,7 +626,7 @@ print_status()
 }
 
 /*
- * Redraw a ``cmd'' line with its current state (command that is
+ * Redraw a ``CMD'' line with its current state (command that is
  * currently typed here or a result of a command, that is displayed
  * on the screen.
  */
@@ -1415,9 +1416,9 @@ del_ln_fwd()
 }
 
 /*
- * Escape to the ``cmd'' prompt: move cursor to the ``cmd'',
+ * Escape to the ``CMD'' prompt: move cursor to the ``CMD'',
  * line, erase it, save the previous cursor position for
- * ``nav'' mode (to restore it later) and print the ":" -
+ * ``NAV'' mode (to restore it later) and print the ":" -
  * the prompt itself.
  */
 void
@@ -1434,13 +1435,13 @@ esc_cmd()
 	 * We zero the first `cmd' character in case we receive a
 	 * `SIGWINCH' before starting entering a new command.  This
 	 * will lead to the situation where _previous_ `cmd' will be
-	 * written to the ``cmd'' line instead of an empty prompt.
+	 * written to the ``CMD'' line instead of an empty prompt.
 	 */
 	cmd[0] = '\0';
 	
 	/*
 	 * Save current text-cursor position to restore it when we
-	 * quit the ``cmd''.
+	 * quit the ``CMD''.
 	 */
 	if (mod == MOD_NAV) {
 		nav_curs_x = curs_x;
@@ -1452,8 +1453,8 @@ esc_cmd()
 }
 
 /*
- * Quit the ``cmd'' prompt and return to the last cursor position
- * in the ``nav'' mode, from which we escaped to the prompt.
+ * Quit the ``CMD'' prompt and return to the last cursor position
+ * in the ``NAV'' mode, from which we escaped to the prompt.
  */
 void
 quit_cmd()
@@ -1592,7 +1593,7 @@ read_cmd()
 }
 
 /*
- * ``cmd'' `f' without arguments prints the current filepath,
+ * ``CMD'' `f' without arguments prints the current filepath,
  * to which the buffer will be saved in case of writing (`w') it.
  * If it's invoked with argument like: `f <path>', then it sets
  * current filepath to `path'.
@@ -1716,7 +1717,7 @@ jmp_ln(size_t ln_num)
 	ln_x = 0;
 	/*
 	 * Set `nav_curs_x', not `curs_x', because this is a
-	 * ``cmd'' command and after `nav_curs_x' tells where
+	 * ``CMD'' command and after `nav_curs_x' tells where
 	 * to put cursor after quitting the prompt.
 	 */
 	nav_curs_x = 1;
@@ -1870,12 +1871,12 @@ do_write_file()
 /*
  * Execute the command, read by `read_cmd' into `cmd' buffer.
  * Returns `0' if command is successfull and we need to immediately
- * quit the ``cmd'' prompt.
+ * quit the ``CMD'' prompt.
  * Returns `1' if the command is OK,
  * but we do _not_ need to clean things up.  It is for commands
- * which outputs the text to the ``cmd'' as a result of execution.
+ * which outputs the text to the ``CMD'' as a result of execution.
  * Returns `-1' if command if failed and we need to print an error
- * message on the ``cmd'' line.
+ * message on the ``CMD'' line.
  */
 int
 do_cmd()
@@ -2182,12 +2183,12 @@ handle_char(char c)
 	case DEL:
 	case BSP:
 		/*
-		 * If we are here _and_ we _are_ in ``cmd'' mode,
+		 * If we are here _and_ we _are_ in ``CMD'' mode,
 		 * it means that we've just entered invalid
 		 * command and see an error on the prompt line.
 		 * In this case, if we press either `ESC', `Delete',
 		 * `Backspace' or newline, we want to continue being
-		 * in ``cmd'' mode, but just remove the error alert.
+		 * in ``CMD'' mode, but just remove the error alert.
 		 * So that means we want to enter cmd-loop again
 		 * and it is done by means of falling through
 		 * to the ":" label.
@@ -2400,7 +2401,7 @@ init_win_sz()
  * Run the visual editor.
  *
  * If no arguments are provided, then an empty anonymous buffer
- * is created and opened in the ``edt'' mode.  You will be
+ * is created and opened in the ``EDT'' mode.  You will be
  * prompted to specify a name to write the buffer out to when
  * you make an attempt for ``write'' command.
  *
