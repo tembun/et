@@ -565,12 +565,12 @@ handle_filepath(char* path)
 	else {
 		lns_l = 1;
 		mod = MOD_EDT;
-		return;
+		goto set_path;
 	}
 	
 	if (close(fd) == -1)
 		die("can not close the file.\n");
-	
+set_path:
 	SET_FILEPATH(path);
 }
 
