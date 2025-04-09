@@ -557,7 +557,6 @@ handle_filepath(char* path)
 	 * initialized.
 	 */
 	if (check_exists(path)) {
-		mod = MOD_NAV;
 		fd = open(path, O_RDONLY);
 		if (fd == -1)
 			die("can not open file at %s.\n", path);
@@ -2405,9 +2404,14 @@ init_win_sz()
  * prompted to specify a name to write the buffer out to when
  * you make an attempt for ``write'' command.
  *
- * First and the only one available argument is a file path. If
- * there's no filt at this path, then then file will be created
- * for reading and writing and then opened.
+ * An option `-e' may be specified as first argument.  This
+ * will put the editor into ``EDT'' mode from the begining.
+ *
+ * After `-e' option next argument may be given, it'll be
+ * treated as a path to file to edit.  If there's no file at
+ * this path, then it's name will be remembered as name of the
+ * file we will write the buffer to.  If target file is empty
+ * or doesn't exist, then editor is started in ``EDT'' mode.
  */
 int
 main(int argc, char** argv)
@@ -2426,16 +2430,33 @@ main(int argc, char** argv)
 		die("Both input and output should go to the terminal.\n");
 	
 	expand_lns();
-	
-	if (argc > 2)
+		
+	if (argc > 3)
 		die("I can edit only one thing at a time.\n");
 	
-	if (argc > 1)
+	if (argc > 1) {
+		int i;
+		
+		i = 1;
 		/*
-		 * Inside we decide regarding initial editor mode.
+		 * Handle `-e' option which sets ``EDT'' mode
+		 * from start.
 		 */
-		handle_filepath(argv[1]);
+		if (argv[i][0] == '-') {
+			if (argv[i][1] != 'e')
+				die("Unknown option.\n");
+			mod = MOD_EDT;
+			i++;
+			if (argc == 2)
+				goto anon;
+		}
+		else
+			mod = MOD_NAV;
+		
+		handle_filepath(argv[i]);
+	}
 	else {
+anon:
 		lns_l = 1;
 		mod = MOD_EDT;
 	}
