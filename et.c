@@ -661,25 +661,6 @@ setup_terminal()
 }
 
 /*
- * Print buffer line at index `idx' [`start', `end').
- */
-void
-print_ln(size_t idx, size_t start, size_t end)
-{
-	char* tmp;
-	size_t len;
-	
-	len = end - start;
-	
-	tmp = smalloc(len);
-	strncpy(tmp, lns[idx]->str, len);
-	
-	write(STDOUT_FILENO, tmp, len);
-	
-	free(tmp);
-}
-
-/*
  * Display the text so that it fits in one screen.
  * The print starts from the current vertical line offset `from'.
  */
@@ -698,7 +679,6 @@ dpl_pg(US from)
 	ln_num = lns_l - off;
 	
 	MV_CURS_SF(from+1, 1);
-	
 	ERS_FWD();
 
 	/* If lines can not fit the screen. */
@@ -712,7 +692,7 @@ dpl_pg(US from)
 	}
 	
 	for (i = off; i < end; ++i) {
-		print_ln(i, 0, lns[i]->l);
+		write(STDOUT_FILENO, lns[i]->str, lns[i]->l);
 		write(STDOUT_FILENO, "\n\r", 2);
 	}
 	
@@ -1950,7 +1930,7 @@ ins_char(char c)
 	 * redraw the rest of the line.
 	 */
 	memmove(lns[LN_Y]->str+LN_X+1, lns[LN_Y]->str+LN_X,
-	    lns[LN_Y]->sz-LN_X);
+	    lns[LN_Y]->sz-LN_X-1);
 	ERS_LINE_FWD();
 	lns[LN_Y]->str[LN_X] = c;
 	lns[LN_Y]->l++;
@@ -2006,10 +1986,10 @@ ins_ln_brk()
 	last_unus = lns[lns_sz-1];
 	/* Shift all the lines below one position down. */
 	memmove(lns+LN_Y+2, lns+LN_Y+1,
-	    (lns_sz-LN_Y) * sizeof(struct ln*));
+	    (lns_sz-LN_Y-1) * sizeof(struct ln*));
 	
 	/*
-	 * Insert early-pre-initialized line structure
+	 * Insert earlier-pre-initialized line structure
 	 * after current line.
 	 */
 	lns[LN_Y+1] = last_unus;
@@ -2019,10 +1999,11 @@ ins_ln_brk()
 	 * The hunk of a line, that used to be after cursor,
 	 * we now transfer to the just-inserted line structure.
 	 */
-	lns[LN_Y+1]->sz = lns[LN_Y+1]->l = lns[LN_Y]->l - LN_X;
-	memcpy(lns[LN_Y+1]->str, lns[LN_Y]->str+LN_X,
-	    lns[LN_Y]->sz-LN_X);
-	
+	lns[LN_Y+1]->sz = lns[LN_Y]->sz-LN_X;
+	lns[LN_Y+1]->l = lns[LN_Y]->l-LN_X;
+	if (lns[LN_Y+1]->l > lns[LN_Y+1]->sz)
+		EXPAND_LN(LN_Y+1, lns[LN_Y+1]->sz - lns[LN_Y+1]->l);
+	memcpy(lns[LN_Y+1]->str, lns[LN_Y]->str+LN_X, lns[LN_Y+1]->sz);
 	/* Trim the current line to its present length. */
 	lns[LN_Y]->l = LN_X;
 	
@@ -2099,6 +2080,7 @@ del_char_back()
 		/* Move all the lines that were below current line, up. */
 		memcpy(lns+LN_Y, lns+LN_Y+1,
 		    (lns_sz-LN_Y) * sizeof(struct ln*));
+		lns_sz--;
 		
 		/*
 		 * Due to the way the `dpl_pg' works (will call it in
