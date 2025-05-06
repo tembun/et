@@ -631,6 +631,9 @@ read_fd(int fd)
 		lns_l++;
 		dirty = 1;
 	}
+	
+	if (i == -1)
+		mod = MOD_EDT;
 }
 
 /*
