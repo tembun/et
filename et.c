@@ -8,6 +8,7 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 
+#include <err.h>
 #include <fcntl.h>
 #include <libgen.h>
 #include <limits.h>
@@ -389,20 +390,6 @@ strrnstr(const char* s, const char* find, size_t slen)
 }
 
 /*
- * Print the error message with program's name prefix and exit.
- */
-void
-die(char* err, ...)
-{
-	va_list ap;
-	va_start(ap, err);
-	dprintf(STDERR_FILENO, "[et]: ");
-	vdprintf(STDERR_FILENO, err, ap);
-	va_end(ap);
-	exit(1);
-}
-
-/*
  * Safe malloc(3).
  */
 void*
@@ -411,7 +398,7 @@ smalloc(size_t size)
 	void* ret;	
 	ret = malloc(size);
 	if (ret == NULL)
-		die("can not allocate %zu bytes.\n", size);
+		errx(1, "Can not allocate %zu bytes", size);
 	return ret;
 }
 
@@ -424,7 +411,7 @@ srealloc(void* p, size_t size)
 	void* ret;
 	ret = realloc(p, size);
 	if (ret == NULL)
-		die("can not reallocate %zu bytes.\n", size);	
+		errx(1, "Can not reallocate %zu bytes", size);	
 	return ret;
 }
 
@@ -437,8 +424,8 @@ scalloc(size_t n, size_t size)
 	void* ret;
 	ret = calloc(n, size);
 	if (ret == NULL)
-		die(
-"can not allocate %zu objects %zu bytes each.\n", n, size);
+		errx(1,
+"Can not allocate %zu objects %zu bytes each", n, size);
 	return ret;
 }
 
@@ -481,7 +468,7 @@ terminate()
 	 * `TCSANOW' flag is for changes to be applied immediately.
 	 */
 	if (tcsetattr(STDOUT_FILENO, TCSANOW, &orig_tos) == -1)
-		die("can not restore original terminal attributes.\n");
+		err(1, "Can not restore original terminal attributes");
 	exit(0);
 }
 
@@ -497,14 +484,14 @@ set_raw()
 {
 	/* Save current settings in `tos'. */
 	if (tcgetattr(STDOUT_FILENO, &tos) == -1)
-		die("can not get terminal attributes.\n");
+		err(1, "Can not get terminal attributes");
 	
 	/* Save (copy) current settings to be able to restore them later. */
 	orig_tos = tos;
 	
 	/* Schedule restoring terminal settings at program's exit. */
 	if (atexit(&terminate) == -1)
-		die("can not register the exit-function.\n");
+		err(1, "Can not register the exit-function");
 	
 	/*
 	 * The following flags are set to enter non-canonical mode.
@@ -547,7 +534,7 @@ set_raw()
 	
 	/* Apply all changes we have just done. */
 	if (tcsetattr(STDOUT_FILENO, TCSANOW, &tos) == -1)
-		die("can not set terminal attributes.\n");
+		err(1, "Can not set terminal attributes");
 }
 
 /*
@@ -618,7 +605,7 @@ read_fd(int fd)
 	}
 	
 	if (arb == -1)
-		die("error during reading a file.\n");
+		err(1, "Error during reading a file");
 	
 	/*
 	 * In case the file is not terminated with a newline,
@@ -658,7 +645,7 @@ handle_filepath(char* path)
 	if (check_exists(path)) {
 		fd = open(path, O_RDONLY);
 		if (fd == -1)
-			die("can not open file at %s.\n", path);
+			err(1, "Can not open file at %s", path);
 		read_fd(fd);
 	}
 	else {
@@ -668,7 +655,7 @@ handle_filepath(char* path)
 	}
 	
 	if (close(fd) == -1)
-		die("can not close the file.\n");
+		err(1, "Can not close the file");
 set_path:
 	SET_FILEPATH(path);
 }
@@ -2697,7 +2684,7 @@ get_win_sz()
 	struct winsize win_sz;
 	
 	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win_sz) == -1)
-		die("can not obtain the terminal window size.\n");
+		err(1, "Can not obtain the terminal window size");
 	
 	/*
 	 * One line (at the bottom) is for entering commands and
@@ -2784,12 +2771,12 @@ main(int argc, char** argv)
 	in_sea = 0;
 	
 	if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO))
-		die("Both input and output should go to the terminal.\n");
+		errx(1, "Both input and output should go to the terminal");
 	
 	expand_lns();
 		
 	if (argc > 3)
-		die("I can edit only one thing at a time.\n");
+		errx(1, "I can edit only one thing at a time");
 	
 	if (argc > 1) {
 		int i;
@@ -2801,7 +2788,7 @@ main(int argc, char** argv)
 		 */
 		if (argv[i][0] == '-') {
 			if (argv[i][1] != 'e')
-				die("Unknown option.\n");
+				errx(1, "Unknown option");
 			mod = MOD_EDT;
 			i++;
 			if (argc == 2)
