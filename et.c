@@ -598,6 +598,8 @@ read_fd(int fd)
 	ssize_t arb;
 	int i;
 	
+	i = -1;
+	
 	while ((arb = read(fd, &buf, IOBUF)) > 0) {
 		for (i = 0; i < arb; ++i) {
 			if (buf[i] == '\n') {
@@ -617,6 +619,18 @@ read_fd(int fd)
 	
 	if (arb == -1)
 		die("error during reading a file.\n");
+	
+	/*
+	 * In case the file is not terminated with a newline,
+	 * we 'insert' that newline, so that it would be written
+	 * back in the file.
+	 *
+	 * `i' can't be zero here.
+	 */
+	if (i == -1 || buf[i-1] != '\n') {
+		lns_l++;
+		dirty = 1;
+	}
 }
 
 /*
