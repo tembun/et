@@ -31,6 +31,8 @@ typedef unsigned short US;
 #define LN_EXPAND 64
 /* Which symbol indicates an empty lines. */
 #define EMPT_LN_MARK "~"
+#define CMD_ESC ":"
+#define SEA_ESC "/"
 
 
 /* The actual text starts to be printed at this screen row. */
@@ -68,6 +70,7 @@ typedef unsigned short US;
 #define MOD_NAV 1
 /* ``EDT'' mode - when we edit the text, i.e. insert/delete it. */
 #define MOD_EDT 2
+#define MOD_SEA 3
 
 /*
  * String command for moving terminal cursor to the row `R' and column `C'.
@@ -216,6 +219,12 @@ struct ln {
 char buf[IOBUF];
 /* Buffer for user commands.  Filled by `read_cmd'. */
 char cmd[IOBUF];
+char fnd[IOBUF];
+int fnd_i;
+int prev_fnd_i;
+char flg;
+char sub[IOBUF];
+int sub_i;
 /* Text that is right now displayed as a result of executing a command. */
 char* cmd_txt;
 /*
@@ -250,6 +259,16 @@ struct termios tos;
  * via `-e' option (see `main').
  */
 char mod;
+/* If we're in search move (found some matches and can navigate). */
+char in_sea;
+US ln_x_tmp;
+US ln_y_tmp;
+US curs_x_tmp;
+US curs_y_tmp;
+/* Line with match. */
+size_t mat_i;
+/* Math offset (within the string `mat_i'). */
+size_t mat_off;
 
 /*
  * Terminal cursor position (row and column).
@@ -306,6 +325,68 @@ char dirty;
  */
 char need_print_pos;
 
+
+/*
+ * This is an implementation of strnstr(3), which is
+ * a FreeBSD-specific API.  It is taken directly from
+ * FreeBSD source code.
+ */
+char*
+str_n_str(const char *s, const char *find, size_t slen)
+{
+	char c, sc;
+	size_t len;
+
+	if ((c = *find++) != '\0') {
+		len = strlen(find);
+		do {
+			do {
+				if (slen-- < 1 || (sc = *s++) == '\0')
+					return (NULL);
+			} while (sc != c);
+			if (len > slen)
+				return (NULL);
+		} while (strncmp(s, find, len) != 0);
+		s--;
+	}
+	return ((char *)s);
+}
+
+/*
+ * This is an implementation of a reversed variant of strnstr(3).
+ */
+char*
+strrnstr(const char* s, const char* find, size_t slen)
+{
+	int find_len;
+	int i;
+	char first;
+	
+	if (*find == '\0')
+		return ((char*) s);
+	
+	find_len = strlen(find);
+	
+	while (slen > 0) {
+		i = find_len-1;
+		first = 1;
+		
+		while (slen > 0 && *(s-1) == find[i--]) {
+			first = 0;
+			slen--;
+			s--;
+			if (i == -1)
+				return ((char*)s);
+		}
+		
+		if (first) {
+			slen--;
+			s--;
+		}
+	}
+	
+	return NULL;
+}
 
 /*
  * Print the error message with program's name prefix and exit.
@@ -641,8 +722,19 @@ print_cmd()
 	 * the process of typing before we called this function.
 	 */
 	if (cmd_txt == NULL) {		
-		PRINT_CHAR(":");
-		write(STDOUT_FILENO, &cmd, cmd_i);
+		PRINT_CHAR(mod == MOD_SEA ? SEA_ESC : CMD_ESC);
+		/*
+		 * If we have found some match results, then we have
+		 * entered a search query and if we've entered it, it
+		 * means that `cmd' includes a ``\n'' in the end.  But
+		 * we _don't_ want to include it in `write', because it
+		 * will append a newline in the end, which will lead to
+		 * shifting all the lines down.  In case of _non_-search
+		 * mode, we don't care about newline in the end, because
+		 * right now there are no such ``cmd''s which save
+		 * the original prompt while giving some results.
+		 */
+		write(STDOUT_FILENO, &cmd, in_sea ? cmd_i-1 : cmd_i);
 	}
 	else
 		WR_REV_VID("%s", cmd_txt);
@@ -715,7 +807,7 @@ dpl_pg(US from)
 	
 	RST_CURS();
 	
-	if (mod != MOD_CMD)
+	if (mod != MOD_CMD && mod != MOD_SEA)
 		print_status();
 }
 
@@ -726,7 +818,7 @@ void
 set_mod(char m)
 {
 	mod = m;
-	if (mod != MOD_CMD)
+	if (mod != MOD_CMD && mod != MOD_SEA)
 		print_mod();
 }
 
@@ -1422,7 +1514,7 @@ del_ln_fwd()
  * the prompt itself.
  */
 void
-esc_cmd()
+esc_cmd(char sea)
 {
 	/*
 	 * At this moment we don't need to store previous
@@ -1448,8 +1540,24 @@ esc_cmd()
 		nav_curs_y = curs_y;
 	}
 	CLN_CMD();
-	PRINT_CHAR(":");
-	set_mod(MOD_CMD);
+	PRINT_CHAR(sea ? SEA_ESC : CMD_ESC);
+	set_mod(sea ? MOD_SEA : MOD_CMD);
+}
+
+/*
+ * Clean up search highlighting from screen.
+ */
+void
+clean_sea(char is_new_sea)
+{
+	MV_CURS_SF(curs_y_tmp, curs_x_tmp);
+	write(STDIN_FILENO, lns[mat_i]->str+mat_off,
+	    (is_new_sea ? prev_fnd_i : fnd_i) - 1);
+	RST_CURS();
+	ln_x = ln_x_tmp;
+	ln_y = ln_y_tmp;
+	nav_curs_x = curs_x_tmp;
+	nav_curs_y = curs_y_tmp;
 }
 
 /*
@@ -1460,6 +1568,10 @@ void
 quit_cmd()
 {
 	CLN_CMD();
+	if (in_sea == 1) {
+		clean_sea(0);
+		in_sea = 0;
+	}
 	mod = MOD_NAV;
 	MV_CURS(nav_curs_y, nav_curs_x);
 	print_status();
@@ -1568,6 +1680,16 @@ read_cmd()
 				 * processing is needed.
 				 */
 				return first;
+			case '/':
+				/*
+				 * Allow to escape to ``SEA'' mode
+				 * from the ``CMD'' one.
+				 */
+				if (mod == MOD_CMD && first) {
+					esc_cmd(1);
+					break;
+				}
+				/* FALLTHROUGH. */
 			default:
 				/* Handle only printable characters. */
 				if (IS_PRINTABLE(*buf)) {
@@ -1869,51 +1991,6 @@ do_write_file()
 }
 
 /*
- * Execute the command, read by `read_cmd' into `cmd' buffer.
- * Returns `0' if command is successfull and we need to immediately
- * quit the ``CMD'' prompt.
- * Returns `1' if the command is OK,
- * but we do _not_ need to clean things up.  It is for commands
- * which outputs the text to the ``CMD'' as a result of execution.
- * Returns `-1' if command if failed and we need to print an error
- * message on the ``CMD'' line.
- */
-int
-do_cmd()
-{	
-	while (*cmd != '\n') {
-		switch (*cmd) {
-		/*
-		 * Quit the editor.
-		 */
-		case 'q':
-		case 'Q':
-			if (*(cmd+1) != '\n')
-				return 1;
-			if (*cmd == 'q' && dirty == 1) {
-				dpl_cmd_txt("Can't - the buffer is dirty.");
-				return 1;
-			}
-			quit();
-			return 0;
-		case 'f':
-			return do_filepath();
-		case 'j':
-			return do_jmp_ln();
-		case 'k':
-			return do_mark_ln();
-		case 'w':
-			return do_write_file();
-		default:
-			return -1;
-		}
-	}
-	
-	/* NOTREACHED. */
-	return 1;
-}
-
-/*
  * Insert one _printable_ character (and tab) under current
  * cursor position.
  */
@@ -2199,7 +2276,11 @@ handle_char(char c)
 			break;
 		/* FALLTHROUGH. */
 	case ':':
-		esc_cmd();
+	case '/':
+		if (in_sea == 0)
+			esc_cmd(c == '/');
+		else
+			esc_cmd(c != ':');
 		if (read_cmd() != 0) {
 			quit_cmd();
 			break;
@@ -2282,6 +2363,263 @@ put_char:
 				del_char_back();
 		}
 	}
+}
+
+/*
+ * Execute the command, read by `read_cmd' into `cmd' buffer.
+ * Returns `0' if command is successfull and we need to immediately
+ * quit the ``CMD'' prompt.
+ * Returns `1' if the command is OK,
+ * but we do _not_ need to clean things up.  It is for commands
+ * which outputs the text to the ``CMD'' as a result of execution.
+ * Returns `-1' if command if failed and we need to print an error
+ * message on the ``CMD'' line.
+ */
+int
+do_cmd_cmd()
+{
+	while (*cmd != '\n') {
+		switch (*cmd) {
+		/*
+		 * Quit the editor.
+		 */
+		case 'q':
+		case 'Q':
+			if (*(cmd+1) != '\n')
+				return 1;
+			if (*cmd == 'q' && dirty == 1) {
+				dpl_cmd_txt("Can't - the buffer is dirty.");
+				return 1;
+			}
+			quit();
+			return 0;
+		case 'f':
+			return do_filepath();
+		case 'j':
+			return do_jmp_ln();
+		case 'k':
+			return do_mark_ln();
+		case 'w':
+			return do_write_file();
+		default:
+			return -1;
+		}
+	}
+	
+	/* NOTREACHED. */
+	return 1;
+}
+
+int
+do_sea()
+{
+	char dir;
+	/* Pointer to the first match symbol within the string. */
+	char* mat_p;
+	char nav;
+	ssize_t arb;
+	size_t prv_mat_off;
+	size_t sea_off;
+	char out;
+	int mat_len;
+	/* Previous index of line where we met match. */
+	ssize_t prv_mat_i;
+	
+	if (in_sea == 1)
+		clean_sea(1);
+	
+	in_sea = 0;
+	mat_off = LN_X;
+	prv_mat_off = mat_off;
+	prv_mat_i = -1;
+	dir = 1;
+	mat_len = 0;
+	
+	/*
+	 * This loop does iteration through matches back and forth.
+	 */
+	for (mat_i = LN_Y; mat_i < lns_l && mat_i >= 0; mat_i += dir) {
+nx_sea:
+		sea_off = mat_off + mat_len;
+		/*
+		 * Search forward.
+		 */
+		if (dir == 1)
+			mat_p = str_n_str(lns[mat_i]->str+sea_off, fnd,
+			    lns[mat_i]->l-sea_off);
+		/*
+		 * Search backward.
+		 */
+		else
+			mat_p = strrnstr(lns[mat_i]->str+mat_off, fnd, mat_off);
+		
+		/*
+		 * Found a match.
+		 */
+		if (mat_p != NULL) {
+			in_sea = 1;
+			if (prv_mat_i != -1) {
+				MV_CURS_SF(curs_y_tmp, curs_x_tmp);
+				write(STDIN_FILENO,
+				    lns[prv_mat_i]->str+mat_off, fnd_i-1);
+			}
+			
+			jmp_ln(mat_i+1);
+			mat_off = prv_mat_off = mat_p-lns[mat_i]->str;
+			mat_len = fnd_i - 1;
+			ln_x_tmp = off_x+mat_off;
+			ln_y_tmp = mat_i-off_y;
+			curs_x_tmp = char2col(mat_i, mat_off);
+			curs_y_tmp = ln_y_tmp+1;
+			MV_CURS_SF(curs_y_tmp, curs_x_tmp);
+			WR_REV_VID("%.*s", mat_len, lns[mat_i]->str+mat_off);
+			print_cmd();
+		}
+		
+		out = (dir == -1 && mat_i == 0 && (mat_off == 0 || \
+		    mat_p == NULL)) || (dir == 1 && mat_i == lns_l-1 && \
+		    (mat_off == lns[mat_i]->l-1 || mat_p == NULL));
+		
+		if (out && in_sea == 0) {
+			/*
+			 * If we haven't entered the search-highlight
+			 * mode yet and we can not see matches any
+			 * further, then, instead of showing an error
+			 * message, first try to search backward and
+			 * jump to the first previous match.  It is
+			 * due to the fact, that search _always_ starts
+			 * forward and we can not start it backward.
+			 */
+			if (dir == 1) {
+				dir = -1;
+				goto nx_sea;
+			}
+			return -1;
+		}
+		
+		if (out) {
+			mat_off = prv_mat_off;
+			mat_len = fnd_i - 1;
+			if (prv_mat_i != -1)
+				mat_i = prv_mat_i;
+		}
+		while (mat_p != NULL || out) {
+			arb = read(STDIN_FILENO, &nav, 1);
+			if (arb != 1)
+				continue;
+			switch (nav) {
+			case ESC:
+				goto quit_sea;
+			case BSP:
+			case DEL:
+			case '/':
+			case ':':
+				handle_char(nav);
+				/*
+				 * We _don't_ want to do anything (like
+				 * cleaning the ``cmd'', because handling the
+				 * `:' char may lead to executing a command,
+				 * which will print something in the ``cmd''
+				 * and after that step, we will wind up in here
+				 * and now we just need to silently quit from
+				 * here in order to be able to restore normal
+				 * read loop.
+				 * I.e., it's a damn kludge, since the search
+				 * subsystem is sort of a one big kludge.
+				 */
+				return 1;
+			case 'n':
+			case 'N':
+				prv_mat_i = mat_i;
+				dir = (nav == 'n') ? 1 : -1;
+				goto nx_sea;
+			}
+		}
+		
+		if (dir == 1) {
+			mat_off = 0;
+			mat_len = 0;
+		}
+		else if (mat_i > 0)
+			mat_off = lns[mat_i-1]->l;
+	}
+	
+quit_sea:
+	if (in_sea) {
+		quit_cmd();
+		in_sea = 0;
+		return 0;
+	}
+	else {
+		in_sea = 0;
+		return -1;
+	}
+}
+
+int
+exec_sea()
+{
+	int i;
+	/*
+	 * `0' - accumulating `fnd'.
+	 * `1' - accumulating `flg'.
+	 * `2' - accumulating `sub'.
+	 */
+	char state;
+	char pesc;
+	
+	state = 0;
+	pesc = 0;
+	prev_fnd_i = fnd_i;
+	fnd_i = 0;
+	sub_i = 0;
+	
+	for (i = 0; i < cmd_i; ++i) {
+		if (cmd[i] == '/') {
+			if (pesc)
+				goto lit;
+			
+			if (state == 2)
+				break;
+			else {
+				state++;
+				continue;
+			}
+		}
+		
+		if (cmd[i] == '\\') {
+lit:
+			pesc ^= 1;
+			if (pesc)
+				continue;
+		}
+		
+		switch (state) {
+		case 0:
+			fnd[fnd_i++] = cmd[i];
+			break;
+		case 1:
+			flg = cmd[i];
+			break;
+		case 2:
+			sub[sub_i++] = cmd[i];
+			break;
+		}
+	}
+	
+	fnd[fnd_i++] = sub[sub_i++] = '\0';
+	
+	if (fnd[0] != '\0')
+		return do_sea();
+}
+
+int
+do_cmd()
+{
+	if (mod == MOD_CMD)
+		return do_cmd_cmd();
+	else
+		return exec_sea();
 }
 
 /*
@@ -2371,7 +2709,7 @@ handle_sigwinch()
 		curs_y = ws_row;
 	}
 	DPL_PG();
-	if (mod == MOD_CMD)
+	if (mod == MOD_CMD || mod == MOD_SEA)
 		print_cmd();
 }
 
@@ -2426,6 +2764,7 @@ main(int argc, char** argv)
 	ln_y = 0;
 	filepath = NULL;
 	need_print_pos = 0;
+	in_sea = 0;
 	
 	if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO))
 		die("Both input and output should go to the terminal.\n");
