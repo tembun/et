@@ -2615,6 +2615,8 @@ lit:
 	
 	if (fnd[0] != '\0')
 		return do_sea();
+	
+	return -1;
 }
 
 int
