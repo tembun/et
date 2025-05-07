@@ -8,6 +8,7 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 
+#include <ctype.h>
 #include <err.h>
 #include <fcntl.h>
 #include <libgen.h>
@@ -333,7 +334,8 @@ char need_print_pos;
  * FreeBSD source code.
  */
 char*
-str_n_str(const char *s, const char *find, size_t slen)
+str_n_str(const char *s, const char *find, size_t slen,
+    char ign_case)
 {
 	char c, sc;
 	size_t len;
@@ -344,10 +346,12 @@ str_n_str(const char *s, const char *find, size_t slen)
 			do {
 				if (slen-- < 1 || (sc = *s++) == '\0')
 					return (NULL);
-			} while (sc != c);
+			} while ((ign_case ? (tolower(sc) != tolower(c)) :
+			    sc != c));
 			if (len > slen)
 				return (NULL);
-		} while (strncmp(s, find, len) != 0);
+		} while ((ign_case ? strncasecmp(s, find, len) :
+		    strncmp(s, find, len)) != 0);
 		s--;
 	}
 	return ((char *)s);
@@ -355,9 +359,10 @@ str_n_str(const char *s, const char *find, size_t slen)
 
 /*
  * This is an implementation of a reversed variant of strnstr(3).
+ * `s' is a pointer to last character to search backward from.
  */
 char*
-strrnstr(const char* s, const char* find, size_t slen)
+strrnstr(const char* s, const char* find, size_t slen, char ign_case)
 {
 	int find_len;
 	int i;
@@ -372,12 +377,14 @@ strrnstr(const char* s, const char* find, size_t slen)
 		i = find_len-1;
 		first = 1;
 		
-		while (slen > 0 && *(s-1) == find[i--]) {
+		while (slen > 0 && (*(s-1) == find[i--] ||
+		    (ign_case && tolower(*(s-1)) ==
+		    tolower(find[i+1])))) {
 			first = 0;
 			slen--;
 			s--;
 			if (i == -1)
-				return ((char*)s);
+				return ((char*) s);
 		}
 		
 		if (first) {
@@ -2449,13 +2456,14 @@ nx_sea:
 		 * Search forward.
 		 */
 		if (dir == 1)
-			mat_p = str_n_str(lns[mat_i]->str+sea_off, fnd,
-			    lns[mat_i]->l-sea_off);
+			mat_p = str_n_str(lns[mat_i]->str+sea_off,
+			    fnd, lns[mat_i]->l-sea_off, flg == 'i');
 		/*
 		 * Search backward.
 		 */
 		else
-			mat_p = strrnstr(lns[mat_i]->str+mat_off, fnd, mat_off);
+			mat_p = strrnstr(lns[mat_i]->str+mat_off, fnd,
+			    mat_off, flg == 'i');
 		
 		/*
 		 * Found a match.
