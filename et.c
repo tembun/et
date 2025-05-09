@@ -35,6 +35,9 @@ typedef unsigned short US;
 #define EMPT_LN_MARK "~"
 #define CMD_ESC ":"
 #define SEA_ESC "/"
+/* Case-insensitive flag for search and substitution. */
+#define I_FLAG 'i'
+#define IS_I_FLAG (flg == I_FLAG)
 
 
 /* The actual text starts to be printed at this screen row. */
@@ -2456,13 +2459,13 @@ nx_sea:
 		 */
 		if (dir == 1)
 			mat_p = str_n_str(lns[mat_i]->str+sea_off,
-			    fnd, lns[mat_i]->l-sea_off, flg == 'i');
+			    fnd, lns[mat_i]->l-sea_off, IS_I_FLAG);
 		/*
 		 * Search backward.
 		 */
 		else
 			mat_p = strrnstr(lns[mat_i]->str+mat_off, fnd,
-			    mat_off, flg == 'i');
+			    mat_off, IS_I_FLAG);
 		
 		/*
 		 * Found a match.
@@ -2587,7 +2590,7 @@ do_sub()
 	for (i = 0; i < lns_l; ++i) {
 		mat_off = 0;
 		while ((mat_p = str_n_str(lns[i]->str+mat_off, fnd,
-		    lns[i]->l-mat_off, flg == 'i')) != NULL) {
+		    lns[i]->l-mat_off, IS_I_FLAG)) != NULL) {
 		    	found = 1;
 			mat_off = mat_p - lns[i]->str;
 			if (diff > 0) {
@@ -2676,7 +2679,7 @@ lit:
 			fnd[fnd_i++] = cmd[i];
 			break;
 		case 1:
-			if (cmd[i] != '\0' && cmd[i] != 'i') {
+			if (cmd[i] != '\0' && cmd[i] != I_FLAG) {
 				dpl_cmd_txt("Unknown flag");
 				return 1;
 			}
