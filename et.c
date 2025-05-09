@@ -93,9 +93,9 @@ typedef unsigned short US;
 /* Erase line forward. */
 #define ERS_LINE_FWD_CMD "\x1b[K"
 
-/* Expand the string for line at `lns[I]' `B' bytes. */
+/* Expand the string for line at `lns[I]' by `B' bytes. */
 #define EXPAND_LN(I, B) do {						\
-	lns[I]->str = srealloc(lns[I]->str, lns[I]->sz += B);		\
+	lns[(I)]->str = srealloc(lns[(I)]->str, lns[(I)]->sz += (B));	\
 } while(0)
 
 /* Initialize object for line at index `I'. */
@@ -222,8 +222,7 @@ char buf[IOBUF];
 /* Buffer for user commands.  Filled by `read_cmd'. */
 char cmd[IOBUF];
 char fnd[IOBUF];
-int fnd_i;
-int prev_fnd_i;
+int fnd_i, prev_fnd_i;
 char flg;
 char sub[IOBUF];
 int sub_i;
@@ -2568,6 +2567,59 @@ quit_sea:
 	}
 }
 
+/*
+ * Substitute all the matches of `fnd' through all the text to `sub'.
+ */
+int
+do_sub()
+{
+	char* mat_p;
+	size_t mat_off;
+	size_t i;
+	/* Difference in length between find and substituion strings. */
+	int diff;
+	/* If at least one match was found. */
+	char found;
+	
+	diff = sub_i - fnd_i;
+	found = 0;
+	
+	for (i = 0; i < lns_l; ++i) {
+		mat_off = 0;
+		while ((mat_p = str_n_str(lns[i]->str+mat_off, fnd,
+		    lns[i]->l-mat_off, flg == 'i')) != NULL) {
+		    	found = 1;
+			mat_off = mat_p - lns[i]->str;
+			if (diff > 0) {
+				if (lns[i]->l + diff > lns[i]->sz)
+					EXPAND_LN(i, diff);
+				memmove(lns[i]->str+mat_off+fnd_i-1+diff,
+				    lns[i]->str+mat_off+fnd_i-1,
+				    lns[i]->l-mat_off-fnd_i+1);
+				memcpy(lns[i]->str+mat_off, sub, sub_i-1);
+			}
+			else if (diff < 0) {
+				memcpy(lns[i]->str+mat_off+fnd_i-1+diff,
+				    lns[i]->str+mat_off+fnd_i-1,
+				    lns[i]->sz-mat_off-fnd_i+1);
+				memcpy(lns[i]->str+mat_off, sub, sub_i-1);
+				EXPAND_LN(i, diff);
+			}
+			lns[i]->l += diff;
+			mat_off += sub_i-1;
+		    }
+	}
+	
+	if (found) {
+		DPL_PG();
+		return 0;
+	}
+	else {
+		dpl_cmd_txt("No matches found for substitution");
+		return 1;
+	}
+}
+
 int
 exec_sea()
 {
@@ -2579,20 +2631,33 @@ exec_sea()
 	 */
 	char state;
 	char pesc;
+	char has_sub;
 	
+	/*
+	 * We need to reset the flag every time before parsing
+	 * the new search expression, because in case we omit
+	 * it (the flag), i.e: `/te//et/' the flag will be taken
+	 * from the previous execution, which will lead to the
+	 * situation where the above-mentioned will be, for
+	 * example, case-insensitive.
+	 */
+	flg = 0;
 	state = 0;
 	pesc = 0;
 	prev_fnd_i = fnd_i;
 	fnd_i = 0;
 	sub_i = 0;
+	has_sub = 0;
 	
 	for (i = 0; i < cmd_i; ++i) {
 		if (cmd[i] == '/') {
 			if (pesc)
 				goto lit;
 			
-			if (state == 2)
+			if (state == 2) {
+				has_sub = 1;
 				break;
+			}
 			else {
 				state++;
 				continue;
@@ -2611,6 +2676,10 @@ lit:
 			fnd[fnd_i++] = cmd[i];
 			break;
 		case 1:
+			if (cmd[i] != '\0' && cmd[i] != 'i') {
+				dpl_cmd_txt("Unknown flag");
+				return 1;
+			}
 			flg = cmd[i];
 			break;
 		case 2:
@@ -2620,9 +2689,13 @@ lit:
 	}
 	
 	fnd[fnd_i++] = sub[sub_i++] = '\0';
-	
-	if (fnd[0] != '\0')
-		return do_sea();
+		
+	if (fnd[0] != '\0') {
+		if (has_sub)
+			return do_sub();
+		else
+			return do_sea();
+	}
 	
 	return -1;
 }
