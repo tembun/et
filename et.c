@@ -2679,11 +2679,17 @@ lit:
 			fnd[fnd_i++] = cmd[i];
 			break;
 		case 1:
-			if (cmd[i] != '\0' && cmd[i] != I_FLAG) {
+			switch(cmd[i]) {
+			case '\0':
+			case '\n':
+				break;
+			case I_FLAG:
+				flg = cmd[i];
+				break;
+			default:
 				dpl_cmd_txt("Unknown flag");
 				return 1;
 			}
-			flg = cmd[i];
 			break;
 		case 2:
 			sub[sub_i++] = cmd[i];
