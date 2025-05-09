@@ -1646,7 +1646,7 @@ read_cmd()
 	 * Read and accumulate the command within `buf'.
 	 * `\n' indicates the end of a command.
 	 */
-	while (1) {
+	for (;;) {
 		if (read(STDIN_FILENO, &buf, 1) > 0) {
 			switch (*buf) {
 			/*
@@ -2735,7 +2735,7 @@ do_cmd()
 void
 input_loop()
 {
-	while (1) {
+	for (;;) {
 		while (read(STDIN_FILENO, &buf, 1) == 1) {
 			/*
 			 * If we have just read an `ESC' character it either
