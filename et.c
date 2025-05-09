@@ -1562,7 +1562,7 @@ clean_sea(char is_new_sea)
 {
 	MV_CURS_SF(curs_y_tmp, curs_x_tmp);
 	write(STDIN_FILENO, lns[mat_i]->str+mat_off,
-	    (is_new_sea ? prev_fnd_i : fnd_i) - 1);
+	    (is_new_sea ? prev_fnd_i : fnd_i));
 	RST_CURS();
 	ln_x = ln_x_tmp;
 	ln_y = ln_y_tmp;
@@ -2472,12 +2472,12 @@ nx_sea:
 			if (prv_mat_i != -1) {
 				MV_CURS_SF(curs_y_tmp, curs_x_tmp);
 				write(STDIN_FILENO,
-				    lns[prv_mat_i]->str+mat_off, fnd_i-1);
+				    lns[prv_mat_i]->str+mat_off, fnd_i);
 			}
 			
 			jmp_ln(mat_i+1);
 			mat_off = prv_mat_off = mat_p-lns[mat_i]->str;
-			mat_len = fnd_i - 1;
+			mat_len = fnd_i;
 			ln_x_tmp = off_x+mat_off;
 			ln_y_tmp = mat_i-off_y;
 			curs_x_tmp = char2col(mat_i, mat_off);
@@ -2510,7 +2510,7 @@ nx_sea:
 		
 		if (out) {
 			mat_off = prv_mat_off;
-			mat_len = fnd_i - 1;
+			mat_len = fnd_i;
 			if (prv_mat_i != -1)
 				mat_i = prv_mat_i;
 		}
@@ -2593,20 +2593,20 @@ do_sub()
 			if (diff > 0) {
 				if (lns[i]->l + diff > lns[i]->sz)
 					EXPAND_LN(i, diff);
-				memmove(lns[i]->str+mat_off+fnd_i-1+diff,
-				    lns[i]->str+mat_off+fnd_i-1,
-				    lns[i]->l-mat_off-fnd_i+1);
-				memcpy(lns[i]->str+mat_off, sub, sub_i-1);
+				memmove(lns[i]->str+mat_off+fnd_i+diff,
+				    lns[i]->str+mat_off+fnd_i,
+				    lns[i]->l-mat_off-fnd_i);
+				memcpy(lns[i]->str+mat_off, sub, sub_i);
 			}
 			else if (diff < 0) {
-				memcpy(lns[i]->str+mat_off+fnd_i-1+diff,
-				    lns[i]->str+mat_off+fnd_i-1,
-				    lns[i]->sz-mat_off-fnd_i+1);
-				memcpy(lns[i]->str+mat_off, sub, sub_i-1);
+				memcpy(lns[i]->str+mat_off+fnd_i+diff,
+				    lns[i]->str+mat_off+fnd_i,
+				    lns[i]->sz-mat_off-fnd_i);
+				memcpy(lns[i]->str+mat_off, sub, sub_i);
 				EXPAND_LN(i, diff);
 			}
 			lns[i]->l += diff;
-			mat_off += sub_i-1;
+			mat_off += sub_i;
 		    }
 	}
 	
@@ -2688,7 +2688,7 @@ lit:
 		}
 	}
 	
-	fnd[fnd_i++] = sub[sub_i++] = '\0';
+	fnd[fnd_i] = sub[sub_i] = '\0';
 		
 	if (fnd[0] != '\0') {
 		if (has_sub)
