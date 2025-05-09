@@ -2508,7 +2508,9 @@ nx_sea:
 				dir = -1;
 				goto nx_sea;
 			}
-			return -1;
+			
+			dpl_cmd_txt("No matches found");
+			return 1;
 		}
 		
 		if (out) {
@@ -2653,6 +2655,15 @@ exec_sea()
 	has_sub = 0;
 	
 	for (i = 0; i < cmd_i; ++i) {
+		/*
+		 * If the search command does not end with a slash,
+		 * it means a syntax error.
+		 */
+		if (i == cmd_i-2 && (cmd[i] != '/' || pesc)) {
+			dpl_cmd_txt("Syntax error");
+			return 1;
+		}
+		
 		if (cmd[i] == '/') {
 			if (pesc)
 				goto lit;
