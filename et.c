@@ -1746,6 +1746,20 @@ do_filepath()
 	case '\n':
 		if (filepath == NULL)
 			dpl_cmd_txt("<Anonymous>");
+		else if (dirty) {
+			/*
+			 * If the text buffer is dirty, prepend the
+			 * filename with `*'.
+			 */
+			char* dirty_filepath;
+			
+			dirty_filepath = smalloc(strlen(filepath)+2);
+			strcpy(dirty_filepath, "*");
+			strcat(dirty_filepath, filepath);
+			
+			dpl_cmd_txt(dirty_filepath);
+			free(dirty_filepath);
+		}
 		else
 			dpl_cmd_txt(filepath);
 		return 1;
