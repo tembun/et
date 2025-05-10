@@ -33,6 +33,8 @@ typedef unsigned short US;
 #define LN_EXPAND 64
 /* Which symbol indicates an empty lines. */
 #define EMPT_LN_MARK "~"
+/* Symbol we prepend a filename with dirty buffer with. */
+#define DIRTY_MARK "*"
 #define CMD_ESC ":"
 #define SEA_ESC "/"
 /* Case-insensitive flag for search and substitution. */
@@ -1749,12 +1751,12 @@ do_filepath()
 		else if (dirty) {
 			/*
 			 * If the text buffer is dirty, prepend the
-			 * filename with `*'.
+			 * filename with a marker.
 			 */
 			char* dirty_filepath;
 			
 			dirty_filepath = smalloc(strlen(filepath)+2);
-			strcpy(dirty_filepath, "*");
+			strcpy(dirty_filepath, DIRTY_MARK);
 			strcat(dirty_filepath, filepath);
 			
 			dpl_cmd_txt(dirty_filepath);
