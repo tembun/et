@@ -371,16 +371,12 @@ strrnstr(const char* s, const char* find, size_t slen, char ign_case)
 	int find_len;
 	int i;
 	char first;
-	
 	if (*find == '\0')
 		return ((char*) s);
-	
 	find_len = strlen(find);
-	
 	while (slen > 0) {
 		i = find_len-1;
 		first = 1;
-		
 		while (slen > 0 && (*(s-1) == find[i--] ||
 		    (ign_case && tolower(*(s-1)) ==
 		    tolower(find[i+1])))) {
@@ -390,13 +386,11 @@ strrnstr(const char* s, const char* find, size_t slen, char ign_case)
 			if (i == -1)
 				return ((char*) s);
 		}
-		
 		if (first) {
 			slen--;
 			s--;
 		}
 	}
-	
 	return NULL;
 }
 
@@ -447,10 +441,8 @@ void
 free_lns()
 {
 	size_t i;
-	
 	for (i = 0; i < lns_l; ++i)
 		FREE_LN(i);
-	
 	free(lns);
 }
 
@@ -496,19 +488,15 @@ set_raw()
 	/* Save current settings in `tos'. */
 	if (tcgetattr(STDOUT_FILENO, &tos) == -1)
 		err(1, "Can not get terminal attributes");
-	
 	/* Save (copy) current settings to be able to restore them later. */
 	orig_tos = tos;
-	
 	/* Schedule restoring terminal settings at program's exit. */
 	if (atexit(&terminate) == -1)
 		err(1, "Can not register the exit-function");
-	
 	/*
 	 * The following flags are set to enter non-canonical mode.
 	 * More detailed meanings of these are in termios(4).
 	 */
-	
 	/*
 	 * Disable:
 	 *     `ECHO' and `ECHONL' - to not to echo things back.
@@ -517,7 +505,6 @@ set_raw()
 	 *              I.e. `CTRL+C' for `SIGINT'.
 	 */
 	tos.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG);
-	
 	/*
 	 * Disable:
 	 *     `IXON' - prevent software flow control.  These are the things
@@ -525,7 +512,6 @@ set_raw()
 	 *     `ICRNL' - to not to map `CR' (`\r') to `NL' (`\n').
 	 */
 	tos.c_iflag &= ~(IXON | ICRNL);
-	
 	/*
 	 * Disable:
 	 *     `OPOST' - to turn off output processing, so we need to manually
@@ -533,16 +519,13 @@ set_raw()
 	 *               to print a new line.
 	 */
 	tos.c_oflag &= ~OPOST;
-	
 	/*
-	 * read(2) satisfies when either 1 byte has been read or
-	 * 100 ms have passed.  It will be very helpful for
-	 * handling (in our case, detecting and ignoring) ESCape
-	 * sequences (see `input_loop').
+	 * read(2) satisfies when either 1 byte has been read or 100 ms have
+	 * passed.  It will be very helpful for handling (in our case, detecting
+	 * and ignoring) ESCape sequences (see `input_loop').
 	 */
 	tos.c_cc[VMIN] = 1;
 	tos.c_cc[VTIME] = 1;
-	
 	/* Apply all changes we have just done. */
 	if (tcsetattr(STDOUT_FILENO, TCSANOW, &tos) == -1)
 		err(1, "Can not set terminal attributes");
@@ -560,9 +543,7 @@ void
 expand_lns()
 {
 	size_t i;
-	
 	lns = srealloc(lns, (lns_sz += LNS_EXPAND) * sizeof(struct ln*));
-	
 	/*
 	 * Initialize objects for new lines.
 	 */
@@ -577,7 +558,6 @@ char
 check_exists(char* path)
 {
 	struct stat st;
-		
 	return stat(path, &st) != -1;
 }
 
@@ -595,9 +575,7 @@ read_fd(int fd)
 	/* Actually read bytes. */
 	ssize_t arb;
 	int i;
-	
 	i = -1;
-	
 	while ((arb = read(fd, &buf, IOBUF)) > 0) {
 		for (i = 0; i < arb; ++i) {
 			if (buf[i] == '\n') {
@@ -606,18 +584,14 @@ read_fd(int fd)
 					expand_lns();
 				continue;
 			}
-			
 			if (lns[lns_l]->l == lns[lns_l]->sz)
 				EXPAND_LN(lns_l, LN_EXPAND);
-			
 			lns[lns_l]->str[lns[lns_l]->l] = buf[i];
 			lns[lns_l]->l++;
 		}
 	}
-	
 	if (arb == -1)
 		err(1, "Error during reading a file");
-	
 	/*
 	 * In case the file is not terminated with a newline,
 	 * we 'insert' that newline, so that it would be written
@@ -629,7 +603,6 @@ read_fd(int fd)
 		lns_l++;
 		dirty = 1;
 	}
-	
 	if (i == -1)
 		mod = MOD_EDT;
 }
@@ -645,7 +618,6 @@ handle_filepath(char* path)
 {
 	/* File descriptor for a target file. */
 	int fd;
-	
 	/*
 	 * If file already exists, we open it for reading only,
 	 * and the read it, but if it doesn't we create it for
@@ -664,7 +636,6 @@ handle_filepath(char* path)
 		mod = MOD_EDT;
 		goto set_path;
 	}
-	
 	if (close(fd) == -1)
 		err(1, "Can not close the file");
 set_path:
@@ -768,6 +739,24 @@ setup_terminal()
 }
 
 /*
+ * Get next tab stop from the column `col'.
+ */
+US
+nx_tab(US col)
+{
+	return TABSIZE * ((col-1)/(TABSIZE) + 1) + 1;
+}
+
+for ((size_t j = off_x, US cur_col = 1); j < lns[i]->l &&
+		    cur_col <= ws_col; ++j) {
+			if (lns[i]->str[j] == '\t')
+				cur_col = nx_tab(cur_col);
+			else
+				cur_col++;
+		}
+		write(STDOUT_FILENO, lns[i]->str+off_x+LN_X, j - off_x - LN_X);
+
+/*
  * Display the text so that it fits in one screen.
  * The print starts from the current vertical line offset `from'.
  */
@@ -781,10 +770,8 @@ dpl_pg(US from)
 	/* Number of trailing empty lines. */
 	US empt_num;
 	size_t off;
-	
 	off = off_y + from;
 	ln_num = lns_l - off;
-	
 	MV_CURS_SF(from+1, 1);
 	ERS_FWD();
 
@@ -797,12 +784,17 @@ dpl_pg(US from)
 		end = lns_l;
 		empt_num = ws_row - ln_num - from;
 	}
-	
-	for (i = off; i < end; ++i) {
-		write(STDOUT_FILENO, lns[i]->str, lns[i]->l);
+	for (i = off; i < end; ++i) {		
+		for ((size_t j = off_x, US cur_col = 1); j < lns[i]->l &&
+		    cur_col <= ws_col; ++j) {
+			if (lns[i]->str[j] == '\t')
+				cur_col = nx_tab(cur_col);
+			else
+				cur_col++;
+		}
+		write(STDOUT_FILENO, lns[i]->str+off_x+LN_X, j - off_x - LN_X);
 		write(STDOUT_FILENO, "\n\r", 2);
 	}
-	
 	/*
 	 * In case of empty buffer we don't want to print
 	 * the empty line marker right on the line the
@@ -813,15 +805,12 @@ dpl_pg(US from)
 		curs_y++;
 		SYNC_CURS();
 	}
-	
 	/*
 	 * Print empty lines, if any.
 	 */
 	for (i = 0; i < empt_num; ++i)
 		dprintf(STDOUT_FILENO, "%s\n\r", EMPT_LN_MARK);
-	
 	RST_CURS();
-	
 	if (mod != MOD_CMD && mod != MOD_SEA)
 		print_status();
 }
@@ -838,15 +827,6 @@ set_mod(char m)
 }
 
 /*
- * Get next tab stop from the column `col'.
- */
-US
-nx_tab(US col)
-{
-	return TABSIZE * ((col-1)/(TABSIZE) + 1) + 1;
-}
-
-/*
  * On which column does this (`l_x') character in
  * this (`l_y') line resides.
  * --
@@ -859,7 +839,6 @@ char2col(size_t l_y, size_t l_x)
 	US curs_tmp;
 	/* The index of a character within current `ln'. */
 	size_t x;
-	
 	x = 0;
 	curs_tmp = 1;
 	while (x != l_x) {
@@ -869,7 +848,6 @@ char2col(size_t l_y, size_t l_x)
 			curs_tmp = nx_tab(curs_tmp);
 		++x;
 	}
-	
 	return curs_tmp;
 }
 
@@ -889,7 +867,6 @@ col2char(size_t l_y, US col, US* res_col)
 	US curs_tmp;
 	US nx_tab_col;
 	size_t x;
-	
 	x = 0;
 	curs_tmp = 1;
 	while (curs_tmp < col && x < lns[l_y]->l) {
@@ -919,7 +896,6 @@ col2char(size_t l_y, US col, US* res_col)
 		}
 		++x;
 	}
-	
 	*res_col = curs_tmp;
 	return x;
 }
@@ -935,10 +911,8 @@ nav_right()
 	 * right.  It is used when we handle tab stops.
 	 */
 	US step;
-	
 	if (lns_l == 0)
 		return;
-	
 	/* If it's not the last line character, just move right. */
 	if (LN_X != lns[LN_Y]->l) {
 		if (lns[LN_Y]->str[LN_X] != '\t')
@@ -955,16 +929,13 @@ nav_right()
 	else if (LN_Y != lns_l - 1) {
 		/* Flag is screen scrolling needed. */
 		char scrl;
-		
 		/*
 		 * Scroll is needed only if current line is
 		 * the last visible on the screen.
 		 */
 		scrl = ln_y == ws_row-1;
-		
 		ln_x = 0;
 		curs_x = 1;
-		
 		if (scrl) {
 			off_y++;
 			DPL_PG();
@@ -978,7 +949,6 @@ nav_right()
 	/* Don't move cursor otherwise. */
 	else
 		return;
-	
 	need_print_pos = 1;
 }
 
@@ -992,9 +962,7 @@ nav_left()
 	if (LN_X != 0) {
 		/* See at `nav_right'. */
 		US step;
-		
 		ln_x--;
-		
 		if (lns[LN_Y]->str[LN_X] != '\t')
 			step = 1;
 		else
@@ -1005,13 +973,11 @@ nav_left()
 	else if (LN_Y != 0) {
 		/* Will we do scroll. */
 		char scrl;
-		
 		/*
 		 * We do scroll if it's the first visible
 		 * line on the screen.
 		 */
 		scrl = ln_y == 0;
-		
 		if (scrl) {
 			off_y--;
 			DPL_PG();
@@ -1020,7 +986,6 @@ nav_left()
 			ln_y--;
 			curs_y--;
 		}
-		
 		ln_x = lns[LN_Y]->l;
 		curs_x = char2col(LN_Y, LN_X);
 		SYNC_CURS();
@@ -1028,7 +993,6 @@ nav_left()
 	/* Don't move the cursor otherwise. */
 	else
 		return;
-	
 	need_print_pos = 1;
 }
 
@@ -1041,13 +1005,10 @@ nav_dwn()
 	/* Is using scroll. */
 	char scrl;
 	US nw_curs_x;
-	
 	/* If last line of a _text_. */
 	if (lns_l == 0 || LN_Y == lns_l-1)
 		return;
-	
 	scrl = ln_y == ws_row-1;
-	
 	if (scrl)
 		off_y++;
 	else {
@@ -1056,11 +1017,9 @@ nav_dwn()
 	}
 	ln_x = col2char(LN_Y, curs_x, &nw_curs_x);
 	curs_x = nw_curs_x;
-		
 	if (scrl)
 		DPL_PG();	
 	SYNC_CURS();
-	
 	need_print_pos = 1;
 }
 
@@ -1072,15 +1031,11 @@ nav_up()
 {
 	/* Does scroll need to be used. */
 	char scrl;
-	
 	/* If first line of a _text_. */
 	if (LN_Y == 0)
 		return;
-	
 	scrl = ln_y == 0;
-	
 	US nw_curs_x;
-	
 	if (scrl)
 		off_y--;
 	else {
@@ -1089,11 +1044,9 @@ nav_up()
 	}
 	ln_x = col2char(LN_Y, curs_x, &nw_curs_x);
 	curs_x = nw_curs_x;
-	
 	if (scrl)
 		DPL_PG();
 	SYNC_CURS();
-	
 	need_print_pos = 1;
 }
 
@@ -1107,14 +1060,12 @@ scrl_dwn(size_t scrl_ln)
 	size_t last_ln = off_y+ws_row-1;
 	/* How many lines to _actually_ scroll. */
 	size_t scrl_n;
-	
 	/*
 	 * If we're already on the last screen - we have nothing
 	 * to scroll.
 	 */
 	if (off_y+ws_row >= lns_l)
 		return;
-	
 	/*
 	 * If we want to scroll out of screen scroll until
 	 * the last text line will be the last screen line.
@@ -1123,7 +1074,6 @@ scrl_dwn(size_t scrl_ln)
 		scrl_n = lns_l-1 - last_ln;
 	else
 		scrl_n = scrl_ln;
-	
 	/*
 	 * If current cursor position will not survive scrolling
 	 * (will linger in the top and be lost), then we manually
@@ -1144,11 +1094,9 @@ scrl_dwn(size_t scrl_ln)
 		curs_y -= scrl_n;
 		ln_y -= scrl_n;
 	}
-	
 	off_y += scrl_n;	
 	DPL_PG();
 	SYNC_CURS();
-	
 	need_print_pos = 1;
 }
 
@@ -1160,14 +1108,12 @@ scrl_up(size_t scrl_ln)
 {
 	/* How many lines to actually scroll up. */
 	size_t scrl_n;
-	
 	/*
 	 * If we're on the first possible screen, then we
 	 * physically can not scroll up.
 	 */
 	if (off_y == 0)
 		return;
-	
 	/*
 	 * If we're going to scroll too much up (and cross the
 	 * first line), then scroll until first line is the
@@ -1177,7 +1123,6 @@ scrl_up(size_t scrl_ln)
 		scrl_n = off_y;
 	else
 		scrl_n = scrl_ln;
-	
 	/*
 	 * If cursor is about to linger in the bottom (being
 	 * not visible), then manually put in at the first
@@ -1197,11 +1142,9 @@ scrl_up(size_t scrl_ln)
 		curs_y += scrl_n;
 		ln_y += scrl_n;
 	}
-	
 	off_y -= scrl_n;
 	DPL_PG();
 	SYNC_CURS();
-	
 	need_print_pos = 1;
 }
 
@@ -1214,11 +1157,9 @@ void
 scrl_end()
 {
 	US last_row;
-	
 	curs_x = char2col(lns_l-1, lns[lns_l-1]->l);
 	ln_x = lns[lns_l-1]->l;
 	last_row = lns_l - off_y;
-	
 	/* If need to scroll the screen. */
 	if (last_row > ws_row) {
 		off_y = lns_l - ws_row;
@@ -1239,7 +1180,6 @@ scrl_end()
 		curs_y = last_row;
 		SYNC_CURS();
 	}
-	
 	need_print_pos = 1;
 }
 
@@ -1253,12 +1193,10 @@ scrl_start()
 	/* Skip if cursor's already on the first text line and character. */
 	if (LN_Y == 0 && LN_X == 0)
 		return;
-	
 	ln_x = 0;
 	ln_y = 0;
 	curs_x = 1;
 	curs_y = 1;
-	
 	/* If we need to do actual scroll and redraw page. */
 	if (off_y != 0) {
 		off_y = 0;
@@ -1270,7 +1208,6 @@ scrl_start()
 	 */
 	else
 		SYNC_CURS();
-	
 	need_print_pos = 1;
 }
 
@@ -1283,12 +1220,10 @@ nav_ln_start()
 	/* Skip if we're already there. */
 	if (LN_X == 0)
 		return;
-	
 	off_x = 0;
 	ln_x = 0;
 	curs_x = 1;
 	SYNC_CURS();
-	
 	need_print_pos = 1;
 }
 
@@ -1301,11 +1236,9 @@ nav_ln_end()
 	/* Skip if we're already there. */
 	if (LN_X == lns[LN_Y]->l)
 		return;
-	
 	ln_x = lns[LN_Y]->l;
 	curs_x = char2col(LN_Y, lns[LN_Y]->l);
 	SYNC_CURS();
-	
 	need_print_pos = 1;
 }
 
@@ -1321,10 +1254,8 @@ nav_word_nx()
 	size_t nav_char;
 	US nav_col;
 	char first;
-	
 	nav_char = 0;
 	first = 1;
-	
 	/* If we're at the end of line. */
 	if (LN_X == lns[LN_Y]->l) {
 		/* We're at the end of text - can't move further. */
@@ -1337,7 +1268,6 @@ nav_word_nx()
 		nav_right();
 		return;
 	}
-	
 	for (i = LN_X; i <= lns[LN_Y]->l; (++i, first = 0)) {
 		if (i == lns[LN_Y]->l) {
 			nav_char = i;
@@ -1365,7 +1295,6 @@ out:
 	ln_x = nav_char;
 	curs_x = nav_col;
 	SYNC_CURS();
-	
 	need_print_pos = 1;
 }
 
@@ -1380,10 +1309,8 @@ nav_word_pr()
 	size_t nav_char;
 	US nav_col;
 	char first;
-	
 	nav_char = 0;
 	first = 1;
-	
 	/* If we're at the first line character. */
 	if (LN_X == 0) {
 		/* If we're in the first text line - skip. */
@@ -1393,7 +1320,6 @@ nav_word_pr()
 		nav_left();
 		return;
 	}
-	
 	for (i = LN_X-1; i >= 0; (--i, first = 0)) {
 		if (i == 0) {
 			nav_char = 0;
@@ -1421,7 +1347,6 @@ out:
 	ln_x = nav_char;
 	curs_x = nav_col;
 	SYNC_CURS();
-	
 	need_print_pos = 1;
 }
 
@@ -1433,7 +1358,6 @@ del_ln_fwd()
 {
 	/* If we're on the last _text_ line. */
 	char last;
-	
 	/*
 	 * If the cursor is in the middle of line, then
 	 * we erase the rest part of this line.  Cursor
@@ -1444,7 +1368,6 @@ del_ln_fwd()
 		ERS_LINE_FWD();
 		return;
 	}
-	
 	/*
 	 * If we've reached this, it means we're in the
 	 * begining of line and the line itself is empty.
@@ -1461,18 +1384,13 @@ del_ln_fwd()
 	 *        In this case, we move one _screen_ up and
 	 *        put the cursor on the last line possible.
 	 */
-	
 	last = LN_Y == lns_l - 1;
-	
 	FREE_LN(LN_Y);
-	
 	/* Move all lines that are after the deleted one up. */
 	memcpy(&lns[LN_Y], &lns[LN_Y+1],
 		(lns_sz-LN_Y-1) * (sizeof(struct ln*)));
-	
 	lns_l--;
 	lns_sz--;
-	
 	if (last) {
 		/* Case #1 (subcase 2). */
 		if (ln_y == ws_row - 1 && off_y != 0) {
@@ -1490,11 +1408,9 @@ del_ln_fwd()
 				off_y -= ws_row;
 			else
 				off_y = 0;
-			
 			/* Put cursor on the last possible line. */
 			ln_y = CLAMP_MAX(lns_l-off_y, ws_row-1);
 			curs_y = ln_y+1;
-			
 			DPL_PG();
 			SYNC_CURS();
 		}
@@ -1507,7 +1423,6 @@ del_ln_fwd()
 			 * up and put an empty line marker below.
 			 */
 			dprintf(STDOUT_FILENO, EMPT_LN_MARK);
-			
 			/* Move cursor one line up. */
 			ln_y--;
 			curs_y--;
@@ -1517,7 +1432,6 @@ del_ln_fwd()
 	/* Redraw all the lines below (not entire page). */
 	else
 		dpl_pg(ln_y);
-	
 	dirty = 1;
 	need_print_pos = 1;
 }
@@ -1537,7 +1451,6 @@ esc_cmd(char sea)
 	 */
 	free(cmd_txt);
 	cmd_txt = NULL;
-	
 	/*
 	 * We zero the first `cmd' character in case we receive a
 	 * `SIGWINCH' before starting entering a new command.  This
@@ -1545,7 +1458,6 @@ esc_cmd(char sea)
 	 * written to the ``CMD'' line instead of an empty prompt.
 	 */
 	cmd[0] = '\0';
-	
 	/*
 	 * Save current text-cursor position to restore it when we
 	 * quit the ``CMD''.
@@ -1606,10 +1518,8 @@ dpl_cmd_txt(char* msg)
 	 */
 	cmd_txt = srealloc(cmd_txt, strlen(msg)+1);
 	strcpy(cmd_txt, msg);
-	
 	CLN_CMD();
 	WR_REV_VID("%s", msg);
-	
 	/*
 	 * For cursor not to hang about in the end.
 	 * It makes an illusion of trailing whitespace.
@@ -1640,10 +1550,8 @@ read_cmd()
 	 * first character that will appear in `cmd'.
 	 */
 	int first;
-	
 	cmd_i = 0;
 	first = 1;
-	
 	/*
 	 * Read and accumulate the command within `buf'.
 	 * `\n' indicates the end of a command.
@@ -1670,7 +1578,6 @@ read_cmd()
 					 */
 					MV_CURS(ws_row + 2, 2);
 					ERS_LINE_FWD();
-					
 					/*
 					 * Pretend that this loop has just
 					 * begun.
@@ -1720,7 +1627,6 @@ read_cmd()
 			}
 		}
 	}
-	
 	/*
 	 * Actually we can reach this place only if we've entered
 	 * `IOBUF' characters and _didn't_ put a `\n' there.  So
@@ -1741,9 +1647,7 @@ int
 do_filepath()
 {
 	char* cmdp;
-	
 	cmdp = &cmd[1];
-	
 	switch (*cmdp) {
 	case '\n':
 		if (filepath == NULL)
@@ -1754,11 +1658,9 @@ do_filepath()
 			 * filename with a marker.
 			 */
 			char* dirty_filepath;
-			
 			dirty_filepath = smalloc(strlen(filepath)+2);
 			strcpy(dirty_filepath, DIRTY_MARK);
 			strcat(dirty_filepath, filepath);
-			
 			dpl_cmd_txt(dirty_filepath);
 			free(dirty_filepath);
 		}
@@ -1768,10 +1670,8 @@ do_filepath()
 	case ' ': {
 		char* path;
 		int i;
-		
 		cmdp++;
 		path = smalloc(PATH_MAX+1);
-		
 		for (i = 0; i < PATH_MAX; ++i) {
 			if (*(cmdp+i) == '\n')
 				break;
@@ -1780,7 +1680,6 @@ do_filepath()
 		if (i == 0)
 			return -1;
 		path[i+1] = '\0';
-		
 		SET_FILEPATH(path);
 		free(path);
 		return 0;
@@ -1800,10 +1699,8 @@ int
 do_mark_ln()
 {
 	size_t i;
-	
 	if (!(IS_MARK(cmd[1])))
 		return -1;
-	
 	/*
 	 * If another line already has this mark, remove it
 	 * from it (i.e. reassign mark to current line).
@@ -1814,7 +1711,6 @@ do_mark_ln()
 			break;
 		}
 	}
-	
 	lns[LN_Y]->mark = cmd[1];
 	return 0;
 }
@@ -1826,12 +1722,10 @@ ssize_t
 mark2ln(char mark)
 {
 	size_t i;
-	
 	for (i = 0; i < lns_l; ++i) {
 		if (lns[i]->mark == mark)
 			return i;
 	}
-	
 	return -1;
 }
 
@@ -1843,11 +1737,9 @@ void
 jmp_ln(size_t ln_num)
 {
 	US top_off;
-	
 	/* Don't do anything if we're already there. */
 	if (LN_Y == ln_num - 1)
 		return;
-	
 	top_off = ws_row / 2;
 	/*
 	 * If line can't be centered (somewhat line in the begining
@@ -1864,7 +1756,6 @@ jmp_ln(size_t ln_num)
 		ln_y = top_off - 1;
 		nav_curs_y = top_off;
 	}
-	
 	ln_x = 0;
 	/*
 	 * Set `nav_curs_x', not `curs_x', because this is a
@@ -1872,7 +1763,6 @@ jmp_ln(size_t ln_num)
 	 * to put cursor after quitting the prompt.
 	 */
 	nav_curs_x = 1;
-	
 	DPL_PG();
 }
 
@@ -1885,7 +1775,6 @@ do_jmp_ln()
 {
 	size_t ln_num;
 	char* cmdp = &cmd[1];
-	
 	ln_num = strtol(cmdp, &cmdp, 10);
 	if (ln_num == 0) {
 		if (IS_MARK(*cmdp) && *(cmdp+1) == '\n')
@@ -1893,7 +1782,6 @@ do_jmp_ln()
 		else
 			return -1;
 	}
-	
 	/*
 	 * Here we can be sure that there is _not_ a negative
 	 * or zero value in `ln_num', so we need to check only
@@ -1901,7 +1789,6 @@ do_jmp_ln()
 	 */
 	if (ln_num > lns_l)
 		return -1;
-	
 	jmp_ln(ln_num);
 	return 0;
 }
@@ -1941,16 +1828,12 @@ do_write_file()
 	size_t wbufl;
 	/* Iterator of a `wbuf'. */
 	size_t wbufi;
-	
 	q = *cmdp == 'q';
-	
 	if (q)
 		cmdp++;
-	
 	switch (*cmdp) {
 	case '\n':
 		alc_path = 0;
-		
 		if (filepath == NULL) {
 			dpl_cmd_txt(
 "Which filepath?  Do either `w[q] <path>' or `f <path>'.");
@@ -1960,7 +1843,6 @@ do_write_file()
 		break;
 	case ' ':		
 		alc_path = 1;
-		
 		cmdp++;
 		path = smalloc(PATH_MAX+1);
 		for (i = 0; i < PATH_MAX; ++i) {
@@ -1975,7 +1857,6 @@ do_write_file()
 	default:
 		return -1;
 	}
-	
 	if (check_exists(path))
 		fd = open(path, O_WRONLY | O_TRUNC);
 	else
@@ -1989,12 +1870,10 @@ do_write_file()
 	 */
 	if (alc_path)
 		free(path);
-	
 	wbufl = 0;
 	for (i = 0; i < lns_l; ++i) {
 		wbufl += lns[i]->l+1;
 	}
-	
 	wbuf = smalloc(wbufl);
 	wbufi = 0;
 	for (i = 0; i < lns_l; ++i) {
@@ -2002,7 +1881,6 @@ do_write_file()
 		wbufi += lns[i]->l;
 		wbuf[wbufi++] = '\n';
 	}
-	
 	if (write(fd, wbuf, wbufl) < 0) {
 		free(wbuf);
 		dpl_cmd_txt("Error writing file.");
@@ -2010,12 +1888,9 @@ do_write_file()
 	}
 	free(wbuf);
 	close(fd);
-	
 	dirty = 0;
-	
 	if (q)
 		quit();
-	
 	return 0;
 }
 
@@ -2029,7 +1904,6 @@ ins_char(char c)
 	/* Check if we have enough space for this character. */
 	if (lns[LN_Y]->l + 1 > lns[LN_Y]->sz)
 		EXPAND_LN(LN_Y, LN_EXPAND);
-	
 	/*
 	 * Shift stirng characters one character to the right,
 	 * then insert the character in the empty space and
@@ -2052,7 +1926,6 @@ ins_char(char c)
 	 */
 	nav_right();
 	SYNC_CURS();
-	
 	dirty = 1;
 	need_print_pos = 1;
 }
@@ -2065,10 +1938,8 @@ ins_ln_brk()
 {
 	/* Pointer to last unused line, that has been allocated. */
 	struct ln* last_unus;
-	
 	if (lns_l + 1 > lns_sz)
 		expand_lns();
-	
 	/*
 	 * If we're inserting line break on the last _screen_ line,
 	 * but _not_ on the last _text_ line, we firstly scroll down
@@ -2076,7 +1947,6 @@ ins_ln_brk()
 	 */
 	if (ln_y == ws_row - 1 && LN_Y != lns_l)
 		scrl_dwn(1);
-	
 	/*
 	 * As far as we already have some extra dummy line
 	 * structures, let's not waste and lose them, but
@@ -2093,14 +1963,12 @@ ins_ln_brk()
 	/* Shift all the lines below one position down. */
 	memmove(lns+LN_Y+2, lns+LN_Y+1,
 	    (lns_sz-LN_Y-1) * sizeof(struct ln*));
-	
 	/*
 	 * Insert earlier-pre-initialized line structure
 	 * after current line.
 	 */
 	lns[LN_Y+1] = last_unus;
 	lns_l++;
-	
 	/*
 	 * The hunk of a line, that used to be after cursor,
 	 * we now transfer to the just-inserted line structure.
@@ -2112,7 +1980,6 @@ ins_ln_brk()
 	memcpy(lns[LN_Y+1]->str, lns[LN_Y]->str+LN_X, lns[LN_Y+1]->sz);
 	/* Trim the current line to its present length. */
 	lns[LN_Y]->l = LN_X;
-	
 	/*
 	 * Visually clean up the rest of the current line
 	 * and move the cursor to the newly inserted line.
@@ -2138,7 +2005,6 @@ ins_ln_brk()
 	}
 	else
 		dpl_pg(ln_y);
-	
 	dirty = 1;
 	need_print_pos = 1;
 }
@@ -2164,12 +2030,10 @@ del_char_back()
 		 * line first, and then use its length.
 		 */
 		size_t pr_len;
-		
 		if (LN_Y == 0)
 			return;
 		if (ln_y == 0)
 			scrl_up(1);
-		
 		/* Check, if line above has a room for current line. */
 		if (lns[LN_Y-1]->l + lns[LN_Y]->l > lns[LN_Y-1]->sz)
 			EXPAND_LN(LN_Y-1, lns[LN_Y-1]->l + lns[LN_Y]->l -
@@ -2180,14 +2044,12 @@ del_char_back()
 		 */
 		memcpy(lns[LN_Y-1]->str+lns[LN_Y-1]->l, lns[LN_Y]->str,
 		    lns[LN_Y]->l);
-		
 		pr_len = lns[LN_Y]->l;
 		FREE_LN(LN_Y);
 		/* Move all the lines that were below current line, up. */
 		memcpy(lns+LN_Y, lns+LN_Y+1,
 		    (lns_sz-LN_Y) * sizeof(struct ln*));
 		lns_sz--;
-		
 		/*
 		 * Due to the way the `dpl_pg' works (will call it in
 		 * the end of this branch), it will not do anything if
@@ -2201,7 +2063,6 @@ del_char_back()
 			ERS_LINE_FWD();
 			dprintf(STDOUT_FILENO, EMPT_LN_MARK);
 		}
-		
 		/*
 		 * Move cursor the the end of previous line (that end
 		 * that was _before_ appending the current line).
@@ -2213,7 +2074,6 @@ del_char_back()
 		ln_y--;
 		ln_x = lns[LN_Y]->l;
 		SYNC_CURS();
-		
 		/*
 		 * Visually append current line to the end of
 		 * the previous one.
@@ -2225,28 +2085,22 @@ del_char_back()
 		 * anymore and we can alter it.
 		 */
 		lns[LN_Y]->l += pr_len;
-		
 		/*
 		 * `dpl_pg' makes sense only in case of a not-last line
 		 * (see few comments above).
 		 */
 		if (LN_Y != lns_l-1)
 			dpl_pg(ln_y+1);
-		
 		dirty = 1;
 		need_print_pos = 1;
-		
 		return;
 	}
-	
 	/*
 	 * Plain deleting one character back.
 	 * Since we still need to handle tab stops, we employ
 	 * the `nav_left', which already includes this logic.
 	 */
-	
 	nav_left();
-	
 	/*
 	 * Shift the entire string one character left.
 	 * Bear in mind, that due to the prior call of `nav_left',
@@ -2257,12 +2111,23 @@ del_char_back()
 	    lns[LN_Y]->sz-LN_X);
 	lns[LN_Y]->l--;
 	lns[LN_Y]->sz--;
-	
 	/*
 	 * Redraw everything in this line after the cursor.
 	 */
 	ERS_LINE_FWD();
-	write(STDOUT_FILENO, lns[LN_Y]->str+LN_X, lns[LN_Y]->l-LN_X);
+	/*==========================*/
+	US cur_col;
+	size_t j;
+	cur_col = curs_x;
+	dprintf(2, "curs_x: %hu, off_x: %zu\n", curs_x, off_x);
+	for (j = off_x+LN_X; j < lns[LN_Y]->l && cur_col <= ws_col; ++j) {
+		if (lns[LN_Y]->str[j] == '\t')
+			cur_col = nx_tab(cur_col);
+		else
+			cur_col++;
+	}
+	dprintf(2, "j: %zu, off_x: %zu\n", j, off_x);
+	write(STDOUT_FILENO, lns[LN_Y]->str+off_x+LN_X, j - off_x-LN_X);
 }
 
 /*
@@ -2273,7 +2138,6 @@ handle_char(char c)
 {
 	if (mod == MOD_EDT && c != CTRL('j') && c != BSP && c != DEL)
 		goto put_char;
-	
 	switch (c) {
 	case CTRL('j'):
 		if (mod == MOD_NAV) {
@@ -2314,7 +2178,6 @@ handle_char(char c)
 			quit_cmd();
 			break;
 		}
-		
 		/*
 		 * `read_cmd' has just read command into `cmd'.
 		 */
@@ -2434,7 +2297,6 @@ do_cmd_cmd()
 			return -1;
 		}
 	}
-	
 	/* NOTREACHED. */
 	return 1;
 }
@@ -2453,17 +2315,14 @@ do_sea()
 	int mat_len;
 	/* Previous index of line where we met match. */
 	ssize_t prv_mat_i;
-	
 	if (in_sea == 1)
 		clean_sea(1);
-	
 	in_sea = 0;
 	mat_off = LN_X;
 	prv_mat_off = mat_off;
 	prv_mat_i = -1;
 	dir = 1;
 	mat_len = 0;
-	
 	/*
 	 * This loop does iteration through matches back and forth.
 	 */
@@ -2482,7 +2341,6 @@ nx_sea:
 		else
 			mat_p = strrnstr(lns[mat_i]->str+mat_off, fnd,
 			    mat_off, IS_I_FLAG);
-		
 		/*
 		 * Found a match.
 		 */
@@ -2493,7 +2351,6 @@ nx_sea:
 				write(STDIN_FILENO,
 				    lns[prv_mat_i]->str+mat_off, fnd_i);
 			}
-			
 			jmp_ln(mat_i+1);
 			mat_off = prv_mat_off = mat_p-lns[mat_i]->str;
 			mat_len = fnd_i;
@@ -2505,11 +2362,9 @@ nx_sea:
 			WR_REV_VID("%.*s", mat_len, lns[mat_i]->str+mat_off);
 			print_cmd();
 		}
-		
 		out = (dir == -1 && mat_i == 0 && (mat_off == 0 || \
 		    mat_p == NULL)) || (dir == 1 && mat_i == lns_l-1 && \
 		    (mat_off == lns[mat_i]->l-1 || mat_p == NULL));
-		
 		if (out && in_sea == 0) {
 			/*
 			 * If we haven't entered the search-highlight
@@ -2524,11 +2379,9 @@ nx_sea:
 				dir = -1;
 				goto nx_sea;
 			}
-			
 			dpl_cmd_txt("No matches found");
 			return 1;
 		}
-		
 		if (out) {
 			mat_off = prv_mat_off;
 			mat_len = fnd_i;
@@ -2567,7 +2420,6 @@ nx_sea:
 				goto nx_sea;
 			}
 		}
-		
 		if (dir == 1) {
 			mat_off = 0;
 			mat_len = 0;
@@ -2575,7 +2427,6 @@ nx_sea:
 		else if (mat_i > 0)
 			mat_off = lns[mat_i-1]->l;
 	}
-	
 quit_sea:
 	if (in_sea) {
 		quit_cmd();
@@ -2601,10 +2452,8 @@ do_sub()
 	int diff;
 	/* If at least one match was found. */
 	char found;
-	
 	diff = sub_i - fnd_i;
 	found = 0;
-	
 	for (i = 0; i < lns_l; ++i) {
 		mat_off = 0;
 		while ((mat_p = str_n_str(lns[i]->str+mat_off, fnd,
@@ -2630,7 +2479,6 @@ do_sub()
 			mat_off += sub_i;
 		    }
 	}
-	
 	if (found) {
 		DPL_PG();
 		return 0;
@@ -2653,7 +2501,6 @@ exec_sea()
 	char state;
 	char pesc;
 	char has_sub;
-	
 	/*
 	 * We need to reset the flag every time before parsing
 	 * the new search expression, because in case we omit
@@ -2669,7 +2516,6 @@ exec_sea()
 	fnd_i = 0;
 	sub_i = 0;
 	has_sub = 0;
-	
 	for (i = 0; i < cmd_i; ++i) {
 		/*
 		 * If the search command does not end with a slash,
@@ -2679,11 +2525,9 @@ exec_sea()
 			dpl_cmd_txt("Syntax error");
 			return 1;
 		}
-		
 		if (cmd[i] == '/') {
 			if (pesc)
 				goto lit;
-			
 			if (state == 2) {
 				has_sub = 1;
 				break;
@@ -2693,14 +2537,12 @@ exec_sea()
 				continue;
 			}
 		}
-		
 		if (cmd[i] == '\\') {
 lit:
 			pesc ^= 1;
 			if (pesc)
 				continue;
 		}
-		
 		switch (state) {
 		case 0:
 			fnd[fnd_i++] = cmd[i];
@@ -2723,16 +2565,13 @@ lit:
 			break;
 		}
 	}
-	
 	fnd[fnd_i] = sub[sub_i] = '\0';
-		
 	if (fnd[0] != '\0') {
 		if (has_sub)
 			return do_sub();
 		else
 			return do_sea();
 	}
-	
 	return -1;
 }
 
@@ -2763,7 +2602,6 @@ input_loop()
 			 */
 			if (buf[0] == ESC) {
 				char dummy;
-				
 				/*
 				 * Make use of the `VTIME' flag that we've set
 				 * in `set_raw'.  It means, that read(2) will
@@ -2774,13 +2612,11 @@ input_loop()
 				    read(STDIN_FILENO, &dummy, 1) == 1)
 				    	continue;
 			}
-			
 			/*
 			 * In case it's an ordinary key or a _single_ `ESC',
 			 * we do handle that character.
 			 */
 			handle_char(*buf);
-			
 			/*
 			 * Different actions in `handle_char' can set
 			 * `need_print_pos' flag if they adjust the cursor
@@ -2801,10 +2637,8 @@ void
 get_win_sz()
 {
 	struct winsize win_sz;
-	
 	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win_sz) == -1)
 		err(1, "Can not obtain the terminal window size");
-	
 	/*
 	 * One line (at the bottom) is for entering commands and
 	 * status bar.
@@ -2844,9 +2678,7 @@ void
 init_win_sz()
 {
 	struct sigaction sa;
-	
 	get_win_sz();
-	
 	/*
 	 * It is important to initialize all fields for `sa',
 	 * because otherwise they are filled with random
@@ -2888,18 +2720,13 @@ main(int argc, char** argv)
 	filepath = NULL;
 	need_print_pos = 0;
 	in_sea = 0;
-	
 	if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO))
 		errx(1, "Both input and output should go to the terminal");
-	
 	expand_lns();
-		
 	if (argc > 3)
 		errx(1, "I can edit only one thing at a time");
-	
 	if (argc > 1) {
 		int i;
-		
 		i = 1;
 		/*
 		 * Handle `-e' option which sets ``EDT'' mode
@@ -2915,7 +2742,6 @@ main(int argc, char** argv)
 		}
 		else
 			mod = MOD_NAV;
-		
 		handle_filepath(argv[i]);
 	}
 	else {
@@ -2923,17 +2749,13 @@ anon:
 		lns_l = 1;
 		mod = MOD_EDT;
 	}
-	
 	set_raw();
 	setup_terminal();
 	init_win_sz();
-	
 	DPL_PG();
 	/* Move cursor to the first visible character. */
 	MV_CURS(BUF_ROW, 1);
 	input_loop();
-	
 	terminate();
-	
 	return 0;
 }
